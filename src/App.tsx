@@ -11,29 +11,25 @@ import { Conversions } from "./pages/Conversions";
 import "./App.css";
 import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AppLayout } from "./components/Layout/AppLayout";
 
 function App() {
   return (
     <Router>
       <AuthProvider>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<Login />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route
-            path="/"
             element={
               <ProtectedRoute>
-                <Home />
+                <AppLayout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/conversions"
-            element={
-              <ProtectedRoute>
-                <Conversions />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route path="/home" element={<Home />} />
+            <Route path="/conversions" element={<Conversions />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

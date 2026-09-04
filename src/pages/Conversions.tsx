@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileText,
   Download,
@@ -10,16 +10,42 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import {
+  downloadXmlFile,
+  getConversion,
+  getConversionStats,
+  listConversions,
+  retryConversion,
+  type ConversionRecord,
+  type ConversionStats,
+  isConversionDone,
+} from "../services/api";
 
-// Types
-interface Conversion {
-  id: number;
-  filename: string;
-  date: string;
-  size: string;
-  status: "success" | "failed" | "processing";
-  xmlContent?: string;
-}
+const emptyStats: ConversionStats = {
+  total: 0,
+  success: 0,
+  failed: 0,
+  processing: 0,
+};
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const formatSize = (mb?: number) => {
+  if (mb == null) return "—";
+  if (mb < 0.01) return `${Math.round(mb * 1024)} KB`;
+  return `${mb.toFixed(2)} MB`;
+};
 
 export const Conversions = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -27,151 +53,133 @@ export const Conversions = () => {
     "all" | "success" | "failed" | "processing"
   >("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [conversions, setConversions] = useState<ConversionRecord[]>([]);
+  const [stats, setStats] = useState<ConversionStats>(emptyStats);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const itemsPerPage = 5;
 
-  // Mock data - In real app, fetch from API
-  const conversions: Conversion[] = [
-    {
-      id: 1,
-      filename: "ieee_paper_2024.pdf",
-      date: "02 Sep 2026, 10:30 AM",
-      size: "1.45 MB",
-      status: "success",
-      xmlContent: "<ieee-article>...</ieee-article>",
-    },
-    {
-      id: 2,
-      filename: "research_article_final.pdf",
-      date: "01 Sep 2026, 03:15 PM",
-      size: "2.10 MB",
-      status: "success",
-      xmlContent: "<ieee-article>...</ieee-article>",
-    },
-    {
-      id: 3,
-      filename: "conference_paper_draft.pdf",
-      date: "31 Aug 2026, 11:20 AM",
-      size: "0.80 MB",
-      status: "failed",
-    },
-    {
-      id: 4,
-      filename: "journal_submission_2026.pdf",
-      date: "30 Aug 2026, 09:45 AM",
-      size: "3.20 MB",
-      status: "processing",
-    },
-    {
-      id: 5,
-      filename: "paper_version_2.pdf",
-      date: "29 Aug 2026, 02:00 PM",
-      size: "1.20 MB",
-      status: "success",
-      xmlContent: "<ieee-article>...</ieee-article>",
-    },
-    {
-      id: 6,
-      filename: "ieee_transactions.pdf",
-      date: "28 Aug 2026, 04:30 PM",
-      size: "2.80 MB",
-      status: "success",
-      xmlContent: "<ieee-article>...</ieee-article>",
-    },
-    {
-      id: 7,
-      filename: "draft_paper.pdf",
-      date: "27 Aug 2026, 01:15 PM",
-      size: "0.95 MB",
-      status: "failed",
-    },
-  ];
+  const loadData = useCallback(async () => {
+    const [items, nextStats] = await Promise.all([
+      listConversions(),
+      getConversionStats(),
+    ]);
+    setConversions(items);
+    setStats(nextStats);
+  }, []);
 
-  // Filter and search
-  const filteredConversions = conversions.filter((item) => {
-    const matchesSearch = item.filename
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchesFilter =
-      filterStatus === "all" || item.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        await loadData();
+        setError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load conversions");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadData]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredConversions.length / itemsPerPage);
+  useEffect(() => {
+    const hasActive = conversions.some(
+      (c) => c.status === "processing" || c.status === "pending",
+    );
+    if (!hasActive) return undefined;
+    const timer = window.setInterval(() => {
+      loadData().catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [conversions, loadData]);
+
+  const filteredConversions = useMemo(() => {
+    return conversions.filter((item) => {
+      const name = item.filename || item.original_filename || "";
+      const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
+      const uiStatus = isConversionDone(item.status)
+        ? "success"
+        : item.status === "pending"
+          ? "processing"
+          : item.status;
+      const matchesFilter =
+        filterStatus === "all" || uiStatus === filterStatus;
+      return matchesSearch && matchesFilter;
+    });
+  }, [conversions, searchTerm, filterStatus]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredConversions.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedItems = filteredConversions.slice(
     startIndex,
     startIndex + itemsPerPage,
   );
 
-  // Status badge component
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
+
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "success":
-        return (
-          <span className="badge success">
-            <CheckCircle2 size={14} />
-            Done
-          </span>
-        );
-      case "failed":
-        return (
-          <span className="badge error">
-            <XCircle size={14} />
-            Failed
-          </span>
-        );
-      case "processing":
-        return (
-          <span className="badge processing">
-            <Clock size={14} className="spin" />
-            Processing
-          </span>
-        );
-      default:
-        return null;
+    if (isConversionDone(status)) {
+      return (
+        <span className="badge success">
+          <CheckCircle2 size={14} />
+          Done
+        </span>
+      );
+    }
+    if (status === "failed") {
+      return (
+        <span className="badge error">
+          <XCircle size={14} />
+          Failed
+        </span>
+      );
+    }
+    return (
+      <span className="badge processing">
+        <Clock size={14} className="spin" />
+        Processing
+      </span>
+    );
+  };
+
+  const handleDownload = async (conversion: ConversionRecord) => {
+    try {
+      const full = conversion.xml_content
+        ? conversion
+        : await getConversion(conversion.id);
+      if (!full.xml_content) {
+        window.alert("No XML content available for this conversion");
+        return;
+      }
+      downloadXmlFile(full.filename, full.xml_content);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Download failed");
     }
   };
 
-  // Download handler
-  const handleDownload = (conversion: Conversion) => {
-    if (conversion.status === "success" && conversion.xmlContent) {
-      const blob = new Blob([conversion.xmlContent], {
-        type: "application/xml",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = conversion.filename.replace(".pdf", ".xml");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } else {
-      alert("No XML content available for this conversion");
+  const handleRetry = async (conversion: ConversionRecord) => {
+    try {
+      await retryConversion(conversion.id);
+      await loadData();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Retry failed");
     }
-  };
-
-  // Retry handler
-  const handleRetry = (conversion: Conversion) => {
-    alert(`Retrying conversion for: ${conversion.filename}`);
-    // In real app, this would re-upload and convert
-  };
-
-  // Stats
-  const stats = {
-    total: conversions.length,
-    success: conversions.filter((c) => c.status === "success").length,
-    failed: conversions.filter((c) => c.status === "failed").length,
-    processing: conversions.filter((c) => c.status === "processing").length,
   };
 
   return (
     <div className="conversions-page">
       <div className="conversions-header">
         <div>
-          <h1>📊 Conversion History</h1>
-          <p>View and download your past IEEE XML conversions</p>
+          <h1>Conversion History</h1>
+          <p>View and download IEEE JATS XML conversions from MongoDB</p>
         </div>
         <div className="header-stats">
           <div className="stat-item">
@@ -193,7 +201,6 @@ export const Conversions = () => {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="conversions-filters">
         <div className="search-box">
           <Search size={18} />
@@ -215,30 +222,40 @@ export const Conversions = () => {
             className={`filter-btn success ${filterStatus === "success" ? "active" : ""}`}
             onClick={() => setFilterStatus("success")}
           >
-            ✅ Done
+            Done
           </button>
           <button
             className={`filter-btn error ${filterStatus === "failed" ? "active" : ""}`}
             onClick={() => setFilterStatus("failed")}
           >
-            ❌ Failed
+            Failed
           </button>
           <button
             className={`filter-btn processing ${filterStatus === "processing" ? "active" : ""}`}
             onClick={() => setFilterStatus("processing")}
           >
-            ⏳ Processing
+            Processing
           </button>
         </div>
       </div>
 
-      {/* Table */}
       <div className="conversions-table-container">
-        {filteredConversions.length === 0 ? (
+        {loading ? (
+          <div className="empty-state">
+            <div className="empty-icon">⏳</div>
+            <p>Loading conversions...</p>
+          </div>
+        ) : error ? (
+          <div className="empty-state">
+            <div className="empty-icon">⚠️</div>
+            <p>{error}</p>
+            <span>Start the Python API and MongoDB, then refresh.</span>
+          </div>
+        ) : filteredConversions.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📄</div>
             <p>No conversions found</p>
-            <span>Try adjusting your search or filters</span>
+            <span>Select a PDF on Home, then click Convert</span>
           </div>
         ) : (
           <>
@@ -259,13 +276,19 @@ export const Conversions = () => {
                     <FileText size={16} />
                     <span className="filename">{item.filename}</span>
                   </span>
-                  <span className="col-date">{item.date}</span>
-                  <span className="col-size">{item.size}</span>
+                  <span className="col-date">{formatDate(item.created_at)}</span>
+                  <span className="col-size">{formatSize(item.file_size)}</span>
                   <span className="col-status">
-                    {getStatusBadge(item.status)}
+                    {getStatusBadge(
+                      isConversionDone(item.status)
+                        ? "completed"
+                        : item.status === "pending"
+                          ? "processing"
+                          : item.status,
+                    )}
                   </span>
                   <span className="col-actions">
-                    {item.status === "success" && (
+                    {isConversionDone(item.status) && (
                       <button
                         className="action-btn download"
                         onClick={() => handleDownload(item)}
@@ -283,7 +306,7 @@ export const Conversions = () => {
                         <RotateCcw size={16} />
                       </button>
                     )}
-                    {item.status === "processing" && (
+                    {(item.status === "processing" || item.status === "pending") && (
                       <span className="processing-text">
                         <Clock size={14} className="spin" />
                         Waiting...
@@ -294,7 +317,6 @@ export const Conversions = () => {
               ))}
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="pagination">
                 <button
@@ -329,7 +351,6 @@ export const Conversions = () => {
               </div>
             )}
 
-            {/* Footer Info */}
             <div className="table-footer">
               Showing {startIndex + 1} -{" "}
               {Math.min(startIndex + itemsPerPage, filteredConversions.length)}{" "}

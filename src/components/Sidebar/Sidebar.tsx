@@ -1,17 +1,18 @@
 import { Brand } from "./Brand";
 import { Navigation } from "./Navigation";
-// import { ThemeSwitch } from "./ThemeSwitch";
 import { Profile } from "./Profile";
+import { useSidebar } from "../../context/SidebarContext";
 
 export const Sidebar = () => {
+  const { isOpen } = useSidebar();
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? "open" : ""}`}>
       <Brand />
       <Navigation />
 
       <div className="sidebar-bottom">
-        {/* <ThemeSwitch /> */}
-        <Profile name="Sangeetha" email="sangeetha@gmail.com" />
+        <Profile />
       </div>
     </aside>
   );

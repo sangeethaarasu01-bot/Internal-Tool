@@ -2,7 +2,6 @@ import React, {
   createContext,
   useContext,
   useState,
-  useEffect,
   type ReactNode,
 } from "react";
 import { type User, type AuthContextType } from "../types";
@@ -42,20 +41,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Check for saved session
-    const savedUser = localStorage.getItem("ieee_user");
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        localStorage.removeItem("ieee_user");
-      }
-    }
-    setIsLoading(false);
-  }, []);
+  const [isLoading, setIsLoading] = useState(false);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
@@ -75,7 +61,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     const foundUser = MOCK_USERS.find((u) => u.email === email);
     if (foundUser) {
       setUser(foundUser);
-      localStorage.setItem("ieee_user", JSON.stringify(foundUser));
       setIsLoading(false);
       return true;
     }
@@ -86,7 +71,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("ieee_user");
   };
 
   return (

@@ -1,15 +1,17 @@
-import { CheckCircle2, Loader2, XCircle, FileCode2 } from "lucide-react";
+import { CheckCircle2, Download, FileCode2, Loader2, XCircle } from "lucide-react";
 
 type StatusType = "idle" | "uploading" | "converting" | "success" | "error";
 
 interface ConversionStatusProps {
   status: StatusType;
   message?: string;
+  onDownload?: () => void;
 }
 
 export const ConversionStatus = ({
   status,
   message,
+  onDownload,
 }: ConversionStatusProps) => {
   const getStatusIcon = () => {
     switch (status) {
@@ -33,7 +35,7 @@ export const ConversionStatus = ({
       case "converting":
         return "Converting...";
       case "success":
-        return "Conversion Successful! ✨";
+        return "Conversion Successful";
       case "error":
         return "Conversion Failed";
       default:
@@ -66,6 +68,12 @@ export const ConversionStatus = ({
         <div>
           <strong>{getStatusTitle()}</strong>
           <p>{message || "Your file is ready. Click convert to start."}</p>
+          {status === "success" && onDownload && (
+            <button type="button" className="xml-download-btn" onClick={onDownload}>
+              <Download size={16} />
+              Download IEEE XML
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -119,6 +119,9 @@ button {
 
 .nav-item {
   height: 54px;
+  width: 100%;
+  border: 0;
+  background: transparent;
 
   display: flex;
   align-items: center;
@@ -193,17 +196,42 @@ button {
 
 /* Profile */
 
+.profile-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .profile {
+  width: 100%;
   min-height: 73px;
-
   padding: 12px 10px;
-
   border: 1px solid #e5e8ef;
   border-radius: 10px;
-
+  background: #fff;
   display: flex;
   align-items: center;
   gap: 10px;
+  text-align: left;
+}
+
+.profile .chevron-open {
+  transform: rotate(180deg);
+}
+
+.profile-logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #fde8e8;
+  border-radius: 10px;
+  background: #fff5f5;
+  color: #c62828;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .avatar {
@@ -744,6 +772,25 @@ padding: 1.75rem;
   border: 1px solid #e2e8f0;
 }
 
+.xml-download-btn {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.xml-download-btn:hover {
+  background: #0d9488;
+}
+
 .status-container h3 {
    font-size: 0.875rem;
   font-weight: 600;
@@ -948,10 +995,8 @@ padding: 1.75rem;
 ========================= */
 
 .conversions-page {
-  margin-left: 304px;
-  padding: 40px 57px 25px;
-  min-height: 100vh;
-  background: #f8fafc;
+  min-height: 100%;
+  background: transparent;
 }
 
 /* Header */
@@ -1310,7 +1355,7 @@ padding: 1.75rem;
   left: 0;
   top: 0;
   height: 100vh;
-  width: 240px;
+  width: 304px;
   background: white;
   border-right: 1px solid #e5e7eb;
   display: flex;
@@ -1606,8 +1651,7 @@ footer {
 ========================= */
 @media (max-width: 1024px) {
   .conversions-page {
-    margin-left: 0;
-    padding: 24px 20px;
+    padding: 0;
   }
 
   .conversions-header {
@@ -1632,12 +1676,22 @@ footer {
   }
 }
 
+.mobile-topbar {
+  display: none;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .sidebar {
     width: 230px;
   }
 
   .main {
+    margin-left: 230px;
+    width: calc(100% - 230px);
     padding: 35px 30px;
   }
 
@@ -1646,13 +1700,82 @@ footer {
   }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 899px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    width: 100%;
+    padding: 12px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #edf0f6;
+  }
+
+  .mobile-topbar-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .mobile-topbar-title span {
+    color: #6840ef;
+  }
+
+  .menu-toggle {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #e5e8ef;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #172033;
+  }
+
   .sidebar {
-    display: none;
+    width: min(280px, 86vw);
+    transform: translateX(-110%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 12px 0 40px rgba(15, 23, 42, 0.18);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 90;
   }
 
   .main {
-    padding: 25px 18px;
+    margin-left: 0;
+    width: 100%;
+    padding: 20px 16px 28px;
+  }
+}
+
+@media (max-width: 800px) {
+  .sidebar {
+    display: flex;
+  }
+
+  .main {
+    padding: 20px 16px 28px;
   }
 
   .page-header {
@@ -1789,5 +1912,33 @@ footer {
     align-items: center;
   }
 
-  
+  .conversion-card,
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .header-stats {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.loading-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #68738b;
+}
+
+.loading-screen .spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e5e8ef;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }

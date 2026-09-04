@@ -1,10 +1,12 @@
 // src/pages/Login/Login.tsx
 import React, { useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Code2, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export const Login = () => {
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +33,10 @@ export const Login = () => {
 
     if (!success) {
       setError("Invalid email or password. Please try again.");
+      return;
     }
+
+    navigate("/home", { replace: true });
   };
 
   const quickLogin = async (email: string) => {
@@ -43,8 +48,24 @@ export const Login = () => {
     setIsSubmitting(false);
     if (!success) {
       setError("Quick login failed. Please try manually.");
+      return;
     }
+
+    navigate("/home", { replace: true });
   };
+
+  if (isLoading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/home" replace />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
