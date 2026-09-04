@@ -1,4 +1,6 @@
-const API_BASE = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const PROD_API = "https://internal-tool-backend-x10p.onrender.com";
+const fromEnv = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const API_BASE = fromEnv || (import.meta.env.PROD ? PROD_API : "");
 
 export type ConversionStatusValue =
   | "pending"
