@@ -2,7 +2,6 @@ import { useState } from "react";
 import { PageHeader } from "../components/Header/PageHeader";
 import { FileUpload } from "../components/FileUpload/FileUpload";
 import { ConversionStatus } from "../components/Conversion/ConversionStatus";
-import { StepsCard } from "../components/Steps/StepsCard";
 import { Footer } from "../components/Layout/Footer";
 import {
   downloadXmlFile,
@@ -18,14 +17,12 @@ export const Home = () => {
   const [statusMessage, setStatusMessage] = useState(
     "Your file is ready. Click convert to start.",
   );
-  const [currentStep, setCurrentStep] = useState<number>(-1);
   const [xmlContent, setXmlContent] = useState<string | null>(null);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
     setConversionStatus("idle");
     setStatusMessage("Your file is ready. Click convert to start.");
-    setCurrentStep(-1);
     setXmlContent(null);
   };
 
@@ -33,7 +30,6 @@ export const Home = () => {
     setSelectedFile(null);
     setConversionStatus("idle");
     setStatusMessage("Your file is ready. Click convert to start.");
-    setCurrentStep(-1);
     setXmlContent(null);
   };
 
@@ -49,17 +45,14 @@ export const Home = () => {
     try {
       setConversionStatus("uploading");
       setStatusMessage("Uploading your IEEE paper...");
-      setCurrentStep(0);
 
       const started = await startConversion(selectedFile);
 
       setConversionStatus("converting");
       setStatusMessage("Extracting title, authors, abstract, sections, and references...");
-      setCurrentStep(1);
 
       const result = await pollConversion(started.conversion_id, (record) => {
         if (record.status === "processing") {
-          setCurrentStep(2);
           setStatusMessage("Generating IEEE JATS XML structure...");
         }
       });
@@ -75,13 +68,11 @@ export const Home = () => {
           ? `Ready: ${result.title}`
           : "Your IEEE XML file is ready for download.",
       );
-      setCurrentStep(3);
     } catch (error) {
       setConversionStatus("error");
       setStatusMessage(
         error instanceof Error ? error.message : "Conversion failed. Please try again.",
       );
-      setCurrentStep(-1);
     }
   };
 
@@ -134,8 +125,6 @@ export const Home = () => {
           onDownload={xmlContent ? handleDownload : undefined}
         />
       </section>
-
-      <StepsCard currentStep={currentStep} />
 
       <Footer />
     </>
