@@ -73,13 +73,19 @@ export async function getConversion(id: string): Promise<ConversionRecord> {
   return res.json();
 }
 
-export async function listConversions(status?: string): Promise<ConversionRecord[]> {
+export async function listConversions(
+  status?: string,
+  options?: { skip?: number; limit?: number },
+): Promise<ConversionRecord[]> {
   const params = new URLSearchParams();
   if (status && status !== "all") params.set("status", status);
+  params.set("limit", String(options?.limit ?? 200));
+  if (options?.skip) params.set("skip", String(options.skip));
   const qs = params.toString();
-  const res = await fetch(`${API_BASE}/api/conversions${qs ? `?${qs}` : ""}`);
+  const res = await fetch(`${API_BASE}/api/conversions?${qs}`);
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 export async function getConversionStats(): Promise<ConversionStats> {
