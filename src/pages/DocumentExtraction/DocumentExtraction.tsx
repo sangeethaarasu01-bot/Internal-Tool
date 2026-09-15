@@ -248,20 +248,27 @@ export const DocumentExtraction = () => {
       return;
     }
     setGenerating(true);
-    setMessage(useLlm ? "Running LLM semantic mapping..." : "Generating IEEE JATS XML from template...");
+    setMessage(
+      useLlm
+        ? "Running LLM semantic mapping (may take 2–5 minutes for large PDFs)..."
+        : "Generating IEEE JATS XML from template...",
+    );
     try {
       const response = await generateExtractionXml(extractionId, {
         scope: scope as ApiDocumentScope,
         useLlm,
+        llmFallback: true,
       });
       setGeneratedXml(response);
       setActiveTab("final_xml");
+      setStatus("completed");
       setMessage(
         `IEEE JATS XML generated (${response.mapping_source}). ${
           response.warnings.length ? response.warnings[0] : ""
         }`.trim(),
       );
     } catch (error) {
+      setStatus("failed");
       setMessage(error instanceof Error ? error.message : "XML generation failed.");
     } finally {
       setGenerating(false);

@@ -369,7 +369,7 @@ export interface GenerateXmlResponse {
 
 export async function generateExtractionXml(
   extractionId: string,
-  options?: { scope?: DocumentScope; useLlm?: boolean },
+  options?: { scope?: DocumentScope; useLlm?: boolean; llmFallback?: boolean },
 ): Promise<GenerateXmlResponse> {
   const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/generate-xml`, {
     method: "POST",
@@ -377,6 +377,7 @@ export async function generateExtractionXml(
     body: JSON.stringify({
       scope: options?.scope ?? "full",
       use_llm: options?.useLlm ?? false,
+      llm_fallback: options?.llmFallback ?? true,
     }),
   });
   if (!res.ok) throw new Error(await parseError(res));
