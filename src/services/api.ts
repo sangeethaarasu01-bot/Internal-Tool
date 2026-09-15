@@ -131,3 +131,228 @@ export async function pollConversion(
   }
   throw new Error("Conversion timed out. Check conversion history.");
 }
+
+export type ExtractionStatusValue = "queued" | "processing" | "completed" | "failed";
+
+export type DocumentScope = "front" | "body" | "back" | "full";
+
+export interface ExtractionRecord {
+  extraction_id: string;
+  document_id?: string;
+  filename: string;
+  original_filename?: string;
+  status: ExtractionStatusValue;
+  page_count?: number | null;
+  requires_ocr?: boolean | null;
+  ocr_applied?: boolean;
+  error_message?: string | null;
+  scope?: DocumentScope;
+  template_id?: string | null;
+}
+
+export interface ScopeResponse {
+  document_id: string;
+  scope: DocumentScope;
+  allowed_sections: string[];
+  filtered_ir: Record<string, unknown>;
+  filtered_template_schema?: Record<string, unknown> | null;
+  dropped_element_count: number;
+  warnings: string[];
+}
+
+export interface TemplateUploadResponse {
+  document_id: string;
+  template_id: string;
+  original_filename: string;
+  created_at: string;
+  schema: Record<string, unknown>;
+}
+
+export interface TextSpan {
+  text: string;
+  bbox: number[];
+  font?: string | null;
+  size?: number | null;
+  flags?: number | null;
+}
+
+export interface TextLine {
+  line_id: string;
+  bbox: number[];
+  text: string;
+  spans: TextSpan[];
+}
+
+export interface TextBlock {
+  block_id: string;
+  type: string;
+  bbox: number[];
+  text: string;
+  lines: TextLine[];
+}
+
+export interface PageExtraction {
+  page_number: number;
+  width: number;
+  height: number;
+  text_char_count: number;
+  requires_ocr: boolean;
+  blocks: TextBlock[];
+}
+
+export interface SemanticElement {
+  type: string;
+  tag: string;
+  text: string;
+  source_block_ids: string[];
+  page_numbers: number[];
+  bbox?: number[] | null;
+  confidence: number;
+  children?: SemanticElement[];
+  keywords?: string[];
+  heading?: string | null;
+}
+
+export interface SemanticSection {
+  heading: string;
+  heading_element?: SemanticElement | null;
+  level?: number;
+  paragraphs?: SemanticElement[];
+  subsections?: SemanticSection[];
+  content?: SemanticElement[];
+  content_source_block_ids?: string[];
+}
+
+export interface SemanticDocument {
+  pipeline_version: string;
+  tagged_output?: string;
+  completeness: {
+    raw_character_count: number;
+    structured_character_count: number;
+    excluded_character_count: number;
+    unknown_element_count: number;
+    unmapped_block_ids: string[];
+  };
+  front: {
+    title?: SemanticElement | null;
+    authors: SemanticElement[];
+    affiliations: SemanticElement[];
+    abstract?: SemanticElement | null;
+    keywords?: SemanticElement | null;
+    journal_header?: SemanticElement | null;
+    page_number?: SemanticElement | null;
+    date_history?: SemanticElement | null;
+    corresponding_author?: SemanticElement | null;
+    other?: SemanticElement[];
+  };
+  body?: {
+    sections: SemanticSection[];
+    loose_paragraphs: SemanticElement[];
+  };
+  back?: {
+    reference_list?: SemanticElement | null;
+    references: SemanticElement[];
+    other: SemanticElement[];
+  };
+  unknown?: SemanticElement[];
+}
+
+export interface DocumentStructure {
+  pipeline_version: string;
+  semantic?: SemanticDocument | null;
+}
+
+export interface ExtractionResult {
+  document: {
+    filename: string;
+    page_count: number;
+    requires_ocr: boolean;
+    ocr_applied: boolean;
+    extraction_engine: string;
+    extraction_version: string;
+    metadata: {
+      title?: string | null;
+      author?: string | null;
+      creator?: string | null;
+      producer?: string | null;
+    };
+  };
+  pages: PageExtraction[];
+  stats: {
+    total_blocks: number;
+    total_lines: number;
+    total_chars: number;
+    pages_with_low_text: number[];
+    pages_with_no_text: number[];
+  };
+  structure?: DocumentStructure | null;
+}
+
+export async function startExtraction(file: File): Promise<{
+  extraction_id: string;
+  status: string;
+  filename: string;
+}> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/extractions`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getExtraction(id: string): Promise<ExtractionRecord> {
+  const res = await fetch(`${API_BASE}/api/extractions/${id}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function getExtractionText(id: string): Promise<ExtractionResult> {
+  const res = await fetch(`${API_BASE}/api/extractions/${id}/text`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function pollExtraction(
+  id: string,
+  onTick?: (record: ExtractionRecord) => void,
+): Promise<ExtractionRecord> {
+  for (let i = 0; i < 90; i += 1) {
+    const record = await getExtraction(id);
+    onTick?.(record);
+    if (record.status === "completed" || record.status === "failed") {
+      return record;
+    }
+    await sleep(1000);
+  }
+  throw new Error("Extraction timed out.");
+}
+
+export async function uploadExtractionTemplate(
+  extractionId: string,
+  file: File,
+): Promise<TemplateUploadResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/template`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function applyExtractionScope(
+  extractionId: string,
+  scope: DocumentScope,
+): Promise<ScopeResponse> {
+  const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/scope`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}

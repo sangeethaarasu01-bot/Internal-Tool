@@ -1,4 +1,4 @@
-import { Home, History } from "lucide-react";
+import { Home, History, ScanText } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSidebar } from "../../context/SidebarContext";
 
@@ -8,8 +8,9 @@ export const Navigation = () => {
   const { close } = useSidebar();
 
   const navItems = [
-    { icon: Home, label: "Home", path: "/home" },
-    { icon: History, label: "Conversions", path: "/conversions" },
+    { icon: ScanText, label: "Extract", path: "/extract" },
+    { icon: Home, label: "Legacy XML", path: "/home" },
+    { icon: History, label: "Conv. History", path: "/conversions" },
   ];
 
   return (

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileText,
   Download,
-  RotateCcw,
   CheckCircle2,
   XCircle,
   Clock,
@@ -10,12 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { LegacyPipelineBanner } from "../components/Hybrid/LegacyPipelineBanner";
 import {
   downloadXmlFile,
   getConversion,
   getConversionStats,
   listConversions,
-  retryConversion,
   type ConversionRecord,
   type ConversionStats,
   isConversionDone,
@@ -165,21 +164,17 @@ export const Conversions = () => {
     }
   };
 
-  const handleRetry = async (conversion: ConversionRecord) => {
-    try {
-      await retryConversion(conversion.id);
-      await loadData();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Retry failed");
-    }
-  };
-
   return (
     <div className="conversions-page">
+      <LegacyPipelineBanner variant="info" />
+
       <div className="conversions-header">
         <div>
-          <h1>Conversion History</h1>
-          <p>View and download IEEE JATS XML conversions from MongoDB</p>
+          <h1>Conversion History (legacy)</h1>
+          <p>
+            Historical records from the retired hardcoded pipeline. New work uses
+            Document Extraction → IR JSON.
+          </p>
         </div>
         <div className="header-stats">
           <div className="stat-item">
@@ -298,13 +293,9 @@ export const Conversions = () => {
                       </button>
                     )}
                     {item.status === "failed" && (
-                      <button
-                        className="action-btn retry"
-                        onClick={() => handleRetry(item)}
-                        title="Retry Conversion"
-                      >
-                        <RotateCcw size={16} />
-                      </button>
+                      <span className="legacy-retry-disabled" title="Legacy retry disabled">
+                        Legacy
+                      </span>
                     )}
                     {(item.status === "processing" || item.status === "pending") && (
                       <span className="processing-text">

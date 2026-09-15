@@ -1,22 +1,25 @@
 import { Upload, FileText, Trash2, FileCode2 } from "lucide-react";
 import { useState } from "react";
+import { formatFileSize, isPdfFile } from "../../utils/pdfFile";
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
   selectedFile: File | null;
   onRemove: () => void;
+  pageCount?: number | null;
 }
 
 export const FileUpload = ({
   onFileSelect,
   selectedFile,
   onRemove,
+  pageCount = null,
 }: FileUploadProps) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type === "application/pdf") {
+    if (file && isPdfFile(file)) {
       onFileSelect(file);
     } else {
       alert("Please select a valid PDF file");
@@ -37,18 +40,11 @@ export const FileUpload = ({
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.type === "application/pdf") {
+    if (file && isPdfFile(file)) {
       onFileSelect(file);
     } else {
       alert("Please drop a valid PDF file");
     }
-  };
-
-  // Format file size
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
-    return (bytes / 1024 / 1024).toFixed(2) + " MB";
   };
 
   return (
@@ -64,7 +60,7 @@ export const FileUpload = ({
           <Upload size={35} />
         </div>
 
-        <h3>Drag & drop your IEEE PDF here</h3>
+        <h3>Drag & drop your PDF here</h3>
 
         <span className="or">or</span>
 
@@ -113,7 +109,7 @@ export const FileUpload = ({
               <div className="detail-grid">
                 <div className="detail-row">
                   <span>Pages:</span>
-                  <strong>12</strong>
+                  <strong>{pageCount ?? "—"}</strong>
                 </div>
                 <div className="detail-row">
                   <span>Uploaded:</span>

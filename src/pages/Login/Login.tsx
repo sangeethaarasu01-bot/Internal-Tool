@@ -36,7 +36,7 @@ export const Login = () => {
       return;
     }
 
-    navigate("/projects", { replace: true });
+    navigate("/documents", { replace: true });
   };
 
   const quickLogin = async (email: string) => {
@@ -51,7 +51,7 @@ export const Login = () => {
       return;
     }
 
-    navigate("/projects", { replace: true });
+    navigate("/documents", { replace: true });
   };
 
   if (isLoading) {
@@ -64,7 +64,7 @@ export const Login = () => {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/projects" replace />;
+    return <Navigate to="/documents" replace />;
   }
 
   return (
