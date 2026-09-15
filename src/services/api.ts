@@ -356,3 +356,42 @@ export async function applyExtractionScope(
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+export interface GenerateXmlResponse {
+  document_id: string;
+  scope: DocumentScope;
+  mapping_source: string;
+  prompt_version?: string | null;
+  xml_content: string;
+  warnings: string[];
+  unmapped_content_count: number;
+}
+
+export async function generateExtractionXml(
+  extractionId: string,
+  options?: { scope?: DocumentScope; useLlm?: boolean },
+): Promise<GenerateXmlResponse> {
+  const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/generate-xml`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scope: options?.scope ?? "full",
+      use_llm: options?.useLlm ?? false,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function semanticMapExtraction(
+  extractionId: string,
+  scope: DocumentScope = "full",
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/semantic-map`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}

@@ -10,12 +10,15 @@ import { TemplateUpload } from "../../components/Hybrid/TemplateUpload";
 import { Footer } from "../../components/Layout/Footer";
 import {
   applyExtractionScope,
+  downloadXmlFile,
+  generateExtractionXml,
   getExtractionText,
   pollExtraction,
   startExtraction,
   uploadExtractionTemplate,
   type DocumentScope as ApiDocumentScope,
   type ExtractionResult,
+  type GenerateXmlResponse,
   type PageExtraction,
   type TextBlock,
 } from "../../services/api";
@@ -25,7 +28,7 @@ import { saveExtractionHistoryEntry } from "../../utils/extractionHistory";
 import { formatXmlOutput, type TagLevel } from "../../utils/formatTaggedOutput";
 import { buildIrPayload, type DocumentScope } from "../../utils/irJson";
 
-type ResultTab = "overview" | "text" | "layout" | "pages" | "ir_json";
+type ResultTab = "overview" | "text" | "layout" | "pages" | "ir_json" | "final_xml";
 
 function formatNumber(value: number): string {
   return value.toLocaleString("en-US");
@@ -70,8 +73,11 @@ export const DocumentExtraction = () => {
   const [activeTab, setActiveTab] = useState<ResultTab>("text");
   const [selectedPage, setSelectedPage] = useState(1);
   const [tagLevel, setTagLevel] = useState<TagLevel>("blocks");
+  const [useLlm, setUseLlm] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generatedXml, setGeneratedXml] = useState<GenerateXmlResponse | null>(null);
 
-  const isBusy = status === "uploading" || status === "extracting" || scopeLoading;
+  const isBusy = status === "uploading" || status === "extracting" || scopeLoading || generating;
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -81,6 +87,7 @@ export const DocumentExtraction = () => {
     setExtractionId(null);
     setTemplateId(null);
     setScopedIr(null);
+    setGeneratedXml(null);
     setActiveTab("text");
     setSelectedPage(1);
   };
@@ -95,6 +102,7 @@ export const DocumentExtraction = () => {
     setExtractionId(null);
     setTemplateId(null);
     setScopedIr(null);
+    setGeneratedXml(null);
     setSelectedPage(1);
   };
 
@@ -215,7 +223,7 @@ export const DocumentExtraction = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadXml = () => {
+  const handleDownloadPreviewXml = () => {
     if (!result || !xmlOutputContent) return;
     const blob = new Blob([xmlOutputContent], {
       type: "application/xml;charset=utf-8",
@@ -223,11 +231,46 @@ export const DocumentExtraction = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${result.document.filename.replace(/\.pdf$/i, "")}.xml`;
+    link.download = `${result.document.filename.replace(/\.pdf$/i, "")}.preview.xml`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateXml = async () => {
+    if (!extractionId) {
+      setMessage("Run extraction first.");
+      return;
+    }
+    if (!templateId) {
+      setMessage("Upload a template XML before generating IEEE JATS output.");
+      return;
+    }
+    setGenerating(true);
+    setMessage(useLlm ? "Running LLM semantic mapping..." : "Generating IEEE JATS XML from template...");
+    try {
+      const response = await generateExtractionXml(extractionId, {
+        scope: scope as ApiDocumentScope,
+        useLlm,
+      });
+      setGeneratedXml(response);
+      setActiveTab("final_xml");
+      setMessage(
+        `IEEE JATS XML generated (${response.mapping_source}). ${
+          response.warnings.length ? response.warnings[0] : ""
+        }`.trim(),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "XML generation failed.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleDownloadFinalXml = () => {
+    if (!result || !generatedXml?.xml_content) return;
+    downloadXmlFile(result.document.filename, generatedXml.xml_content);
   };
 
   return (
@@ -238,8 +281,8 @@ export const DocumentExtraction = () => {
             Document <span>Extraction</span>
           </h1>
           <p>
-            Stage 1 PDF text and layout extraction → IR JSON (front / body / back).
-            Scoped XML generation arrives in Phase 2.
+            Upload PDF + template XML → extract content → generate downloadable IEEE JATS XML.
+            Enable LLM for template-flexible mapping across clients.
           </p>
         </div>
       </header>
@@ -277,11 +320,39 @@ export const DocumentExtraction = () => {
             onClick={handleExtract}
             disabled={!selectedFile || isBusy}
           >
-            {isBusy ? "Extracting..." : "Extract Text"}
+            {status === "uploading" || status === "extracting" ? "Extracting..." : "Extract Text"}
           </button>
         </div>
         <ExtractionStatus status={status} message={message} />
       </section>
+
+      {extractionId && templateId ? (
+        <section className="card conversion-card">
+          <div className="conversion-content">
+            <h2>Generate IEEE JATS XML</h2>
+            <p>
+              Uses your uploaded template as the skeleton and fills it with extracted
+              content. Turn on LLM for per-client template mapping.
+            </p>
+            <label className="hybrid-llm-toggle">
+              <input
+                type="checkbox"
+                checked={useLlm}
+                onChange={(event) => setUseLlm(event.target.checked)}
+                disabled={isBusy}
+              />
+              Use LLM semantic mapping (requires GEMINI_API_KEY or OPENAI_API_KEY on backend)
+            </label>
+            <button
+              className="convert-button"
+              onClick={handleGenerateXml}
+              disabled={isBusy}
+            >
+              {generating ? "Generating..." : "Generate IEEE XML"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {result ? (
         <section className="card extraction-result-card">
@@ -318,8 +389,13 @@ export const DocumentExtraction = () => {
           </div>
 
           <div className="extraction-result-actions">
-            <button type="button" className="browse-button" onClick={handleDownloadXml}>
-              Download XML
+            {generatedXml ? (
+              <button type="button" className="browse-button" onClick={handleDownloadFinalXml}>
+                Download IEEE XML
+              </button>
+            ) : null}
+            <button type="button" className="browse-button" onClick={handleDownloadPreviewXml}>
+              Download Preview XML
             </button>
             <button type="button" className="browse-button" onClick={handleDownloadJson}>
               Download JSON
@@ -330,7 +406,8 @@ export const DocumentExtraction = () => {
             {(
               [
                 ["ir_json", "IR JSON"],
-                ["text", "XML Output"],
+                ["final_xml", "IEEE JATS XML"],
+                ["text", "Preview XML"],
                 ["pages", "Pages"],
                 ["layout", "Layout"],
                 ["overview", "Overview"],
@@ -360,6 +437,27 @@ export const DocumentExtraction = () => {
                 <p className="tagged-help">
                   No semantic IR was returned for this extraction. Re-run extraction
                   or check backend Stage 1 output.
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          {activeTab === "final_xml" ? (
+            <div className="extraction-tab-panel">
+              {generatedXml?.xml_content ? (
+                <>
+                  <p className="tagged-help">
+                    Mapping source: <strong>{generatedXml.mapping_source}</strong>
+                    {generatedXml.prompt_version
+                      ? ` · prompt ${generatedXml.prompt_version}`
+                      : ""}
+                  </p>
+                  <pre className="tagged-xml-output">{generatedXml.xml_content}</pre>
+                </>
+              ) : (
+                <p className="tagged-help">
+                  Click <strong>Generate IEEE XML</strong> after uploading a template to
+                  produce downloadable JATS output.
                 </p>
               )}
             </div>
