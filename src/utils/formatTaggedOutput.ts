@@ -1,5 +1,6 @@
 import type { ExtractionResult, PageExtraction, TextBlock } from "../services/api";
 import { classifyBlockColumn } from "./layoutColumn";
+import { escapeForXmlSerialization, serializeXmlStringWithHexQuoteEntities } from "./xmlSerializer";
 
 export type TagLevel = "blocks" | "lines" | "spans";
 
@@ -123,16 +124,10 @@ function sanitizeXmlText(text: string): string {
   return text.replace(ILLEGAL_XML_CHARS, "");
 }
 
-function escapeXmlAttribute(value: string): string {
-  return sanitizeXmlText(value)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;");
-}
-
 /**
  * Tagged XML for preview and download (same string in both places).
  * Prefers Stage 1 semantic tagged output; falls back to block-level tags.
+ * Quote hex entities are applied only at this final serialization step.
  */
 export function formatXmlOutput(
   result: ExtractionResult,
@@ -141,12 +136,14 @@ export function formatXmlOutput(
 ): string {
   const tagged = sanitizeXmlText(semanticTaggedOutput.trim());
   if (tagged) {
-    return `${XML_DECLARATION}\n${tagged}\n`;
+    const serialized = serializeXmlStringWithHexQuoteEntities(tagged);
+    return `${XML_DECLARATION}\n${serialized}\n`;
   }
 
-  const body = formatHtmlSnippet(result, level);
-  const filename = escapeXmlAttribute(result.document.filename);
-  return `${XML_DECLARATION}\n<extraction source="${filename}">\n${body}\n</extraction>\n`;
+  const body = serializeXmlStringWithHexQuoteEntities(
+    `<extraction source="${escapeForXmlSerialization(result.document.filename)}">\n${formatHtmlSnippet(result, level)}\n</extraction>`,
+  );
+  return `${XML_DECLARATION}\n${body}\n`;
 }
 
 /** @deprecated Use formatXmlOutput — kept for callers that still import this name. */
