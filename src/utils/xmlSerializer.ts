@@ -25,6 +25,18 @@ const TYPOGRAPHIC_QUOTE_MAP: Record<string, string> = {
 const TYPOGRAPHIC_QUOTE_PATTERN =
   /[\u2018\u2019\u201a\u201b\u2032\u2035\u2039\u203a\u201c\u201d\u201e\u201f\u2033\u2036\u00ab\u00bb\uff07\uff02]/g;
 
+const LIGATURE_MAP: Record<string, string> = {
+  "\ufb00": "ff",
+  "\ufb01": "fi",
+  "\ufb02": "fl",
+  "\ufb03": "ffi",
+  "\ufb04": "ffl",
+  "\ufb05": "ft",
+  "\ufb06": "st",
+};
+
+const LIGATURE_PATTERN = /[\ufb00-\ufb06]/g;
+
 const INLINE_TAGS = new Set([
   "bold",
   "italic",
@@ -47,6 +59,28 @@ function normalizeTypographicQuotes(text: string): string {
   );
 }
 
+function normalizeTypographicLigatures(text: string): string {
+  return text.replace(
+    LIGATURE_PATTERN,
+    (char) => LIGATURE_MAP[char] ?? char,
+  );
+}
+
+function normalizeForXmlSerialization(text: string): string {
+  return normalizeTypographicLigatures(normalizeTypographicQuotes(text))
+    .replace(/\u00a0/g, " ")
+    .replace(/\u00ad/g, "");
+}
+
+function shouldEncodeAsHexEntity(char: string): boolean {
+  const code = char.codePointAt(0) ?? 0;
+  if (code <= 0x7f) {
+    return false;
+  }
+  // Letter categories: Lu, Ll, Lt, Lm, Lo (accented Latin, Greek, etc.)
+  return /^\p{L}$/u.test(char);
+}
+
 function escapeXmlChar(char: string): string {
   if (char === "&") {
     return "&amp;";
@@ -63,8 +97,8 @@ function escapeXmlChar(char: string): string {
   if (char === "'") {
     return HEX_QUOTE_SINGLE;
   }
-  const code = char.codePointAt(0) ?? 0;
-  if (code > 0x7f) {
+  if (shouldEncodeAsHexEntity(char)) {
+    const code = char.codePointAt(0) ?? 0;
     const hex =
       code <= 0xffff
         ? code.toString(16).toUpperCase().padStart(4, "0")
@@ -76,7 +110,7 @@ function escapeXmlChar(char: string): string {
 
 /** Escape text at final XML serialization time only. */
 export function escapeForXmlSerialization(value: string): string {
-  const normalized = normalizeTypographicQuotes(value);
+  const normalized = normalizeForXmlSerialization(value);
   let result = "";
   for (const char of normalized) {
     result += escapeXmlChar(char);
