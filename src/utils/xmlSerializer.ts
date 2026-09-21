@@ -47,24 +47,39 @@ function normalizeTypographicQuotes(text: string): string {
   );
 }
 
+function escapeXmlChar(char: string): string {
+  if (char === "&") {
+    return "&amp;";
+  }
+  if (char === "<") {
+    return "&lt;";
+  }
+  if (char === ">") {
+    return "&gt;";
+  }
+  if (char === '"') {
+    return HEX_QUOTE_DOUBLE;
+  }
+  if (char === "'") {
+    return HEX_QUOTE_SINGLE;
+  }
+  const code = char.codePointAt(0) ?? 0;
+  if (code > 0x7f) {
+    const hex =
+      code <= 0xffff
+        ? code.toString(16).toUpperCase().padStart(4, "0")
+        : code.toString(16).toUpperCase();
+    return `&#x${hex};`;
+  }
+  return char;
+}
+
 /** Escape text at final XML serialization time only. */
 export function escapeForXmlSerialization(value: string): string {
   const normalized = normalizeTypographicQuotes(value);
   let result = "";
   for (const char of normalized) {
-    if (char === "&") {
-      result += "&amp;";
-    } else if (char === "<") {
-      result += "&lt;";
-    } else if (char === ">") {
-      result += "&gt;";
-    } else if (char === '"') {
-      result += HEX_QUOTE_DOUBLE;
-    } else if (char === "'") {
-      result += HEX_QUOTE_SINGLE;
-    } else {
-      result += char;
-    }
+    result += escapeXmlChar(char);
   }
   return result;
 }
@@ -82,12 +97,19 @@ function formatAttributes(element: Element): string {
   return attrs ? ` ${attrs}` : "";
 }
 
+function isInsignificantWhitespace(value: string): boolean {
+  return value.trim().length === 0;
+}
+
 function serializeInlineContent(element: Element): string {
   const tag = element.tagName;
   const parts = [`<${tag}${formatAttributes(element)}>`];
   for (const node of element.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
-      parts.push(escapeForXmlSerialization(node.textContent ?? ""));
+      const text = node.textContent ?? "";
+      if (!isInsignificantWhitespace(text)) {
+        parts.push(escapeForXmlSerialization(text));
+      }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       parts.push(serializeInlineContent(node as Element));
     }
@@ -102,7 +124,10 @@ function serializeInline(element: Element, depth: number): string {
   const parts = [`${indent}<${tag}${formatAttributes(element)}>`];
   for (const node of element.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
-      parts.push(escapeForXmlSerialization(node.textContent ?? ""));
+      const text = node.textContent ?? "";
+      if (!isInsignificantWhitespace(text)) {
+        parts.push(escapeForXmlSerialization(text));
+      }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       parts.push(serializeInlineContent(node as Element));
     }
@@ -131,7 +156,7 @@ function serializeElement(element: Element, depth: number): string[] {
   for (const node of element.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent ?? "";
-      if (text) {
+      if (text && !isInsignificantWhitespace(text)) {
         lines.push(`${childIndent}${escapeForXmlSerialization(text)}`);
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {

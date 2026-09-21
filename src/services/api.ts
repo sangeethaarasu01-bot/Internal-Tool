@@ -102,7 +102,8 @@ export async function retryConversion(id: string): Promise<void> {
 }
 
 export function downloadXmlFile(filename: string, xml: string) {
-  const blob = new Blob([xml], { type: "application/xml" });
+  const cleaned = xml.replace(/^\uFEFF/, "");
+  const blob = new Blob([cleaned], { type: "application/xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

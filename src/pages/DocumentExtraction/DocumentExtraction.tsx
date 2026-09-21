@@ -225,7 +225,7 @@ export const DocumentExtraction = () => {
 
   const handleDownloadPreviewXml = () => {
     if (!result || !xmlOutputContent) return;
-    const blob = new Blob([xmlOutputContent], {
+    const blob = new Blob([xmlOutputContent.replace(/^\uFEFF/, "")], {
       type: "application/xml;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
@@ -348,7 +348,7 @@ export const DocumentExtraction = () => {
                 onChange={(event) => setUseLlm(event.target.checked)}
                 disabled={isBusy}
               />
-              Use LLM semantic mapping (requires GEMINI_API_KEY or OPENAI_API_KEY on backend)
+              Use LLM semantic mapping (requires ANTHROPIC_API_KEY or OPENAI_API_KEY on backend)
             </label>
             <button
               className="convert-button"
