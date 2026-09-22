@@ -1,9 +1,7 @@
 import { Footer } from "../../components/Layout/Footer";
-import { PRODUCTION_API_URL, resolveApiBaseUrl } from "../../lib/apiBase";
+import { resolveApiBaseUrl } from "../../lib/apiBase";
 
-const API_BASE =
-  resolveApiBaseUrl() ||
-  (import.meta.env.PROD ? PRODUCTION_API_URL : "(dev proxy → http://127.0.0.1:8000)");
+const API_BASE = resolveApiBaseUrl() || "(dev proxy → http://127.0.0.1:8000)";
 
 export const ExtractionSettingsPage = () => (
   <>
