@@ -34,6 +34,7 @@
     "src/components/ValidationPanel.tsx",
     "src/components/DownloadButton.tsx",
     "src/pages/ChatAgent.tsx",
-    "src/components/chat/**/*"
+    "src/components/chat/**/*",
+    "src/components/XmlPreview.tsx"
   ]
 }

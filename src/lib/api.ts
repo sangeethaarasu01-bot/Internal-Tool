@@ -32,8 +32,29 @@ export async function listJobs(): Promise<Job[]> {
   return data;
 }
 
-export async function getResult(id: string) {
-  const { data } = await http.get(`/api/result/${id}`);
+export interface JobResult {
+  status: string;
+  xml_content: string;
+  validation: { valid: boolean; errors: string[] };
+  cost: number;
+  tokens: number;
+  error: string | null;
+  download_url?: string;
+}
+
+export async function getResult(id: string): Promise<JobResult> {
+  const { data } = await http.get<JobResult>(`/api/result/${id}`);
+  return data;
+}
+
+export async function refineJob(
+  jobId: string,
+  instruction: string,
+): Promise<JobResult & { job_id: string }> {
+  const { data } = await http.post(`/api/jobs/${jobId}/refine`, {
+    instruction,
+    apply_entities: true,
+  });
   return data;
 }
 

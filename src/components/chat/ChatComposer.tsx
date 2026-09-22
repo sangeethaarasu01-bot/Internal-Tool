@@ -17,6 +17,8 @@ interface Props {
   onRemoveAttachment: (id: string) => void;
   sendDisabled?: boolean;
   sending?: boolean;
+  mode?: "convert" | "followup";
+  sessionHint?: string;
 }
 
 export default function ChatComposer({
@@ -28,6 +30,8 @@ export default function ChatComposer({
   onRemoveAttachment,
   sendDisabled,
   sending,
+  mode = "convert",
+  sessionHint,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -87,7 +91,11 @@ export default function ChatComposer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Type a message… e.g. Convert this IEEE PDF to the attached XML template"
+          placeholder={
+            mode === "followup"
+              ? "Fix request… e.g. encode special chars as &#x2013;, fix author names, re-validate"
+              : "Type a message… e.g. Convert this IEEE PDF to the attached XML template"
+          }
           rows={1}
           disabled={sending}
           className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-1 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
@@ -108,7 +116,17 @@ export default function ChatComposer({
         </button>
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-500">
-        Attach <strong>PDF</strong> + <strong>XML template</strong>, then send. Shift+Enter for new line.
+        {mode === "followup" ? (
+          <>
+            {sessionHint ? <span className="block text-slate-600">{sessionHint}</span> : null}
+            Send to <strong>fix</strong> the current XML (no re-attach). Attach files only for a{" "}
+            <strong>new</strong> conversion. Shift+Enter = new line.
+          </>
+        ) : (
+          <>
+            Attach <strong>PDF</strong> + <strong>XML template</strong>, then send. Shift+Enter = new line.
+          </>
+        )}
       </p>
     </div>
   );

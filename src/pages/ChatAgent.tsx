@@ -1,41 +1,13 @@
-import { Download } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import ChatComposer, { type AttachedFile } from "../components/chat/ChatComposer";
 import ChatMessage, { type ChatMessageData } from "../components/chat/ChatMessage";
-import { downloadUrl, getJob, getResult, startConvert, uploadFiles } from "../lib/api";
+import OutputPreviewPanel from "../components/chat/OutputPreviewPanel";
+import { downloadUrl, getJob, getResult, refineJob, startConvert, uploadFiles } from "../lib/api";
 import { subscribeToJob } from "../lib/sse";
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function DownloadPanel({ jobId }: { jobId: string }) {
-  const url = downloadUrl(jobId);
-  return (
-    <div className="mt-4 rounded-xl border border-cyan-800/60 bg-cyan-950/40 p-4">
-      <p className="mb-2 text-sm font-medium text-cyan-100">Your output XML is ready</p>
-      <a
-        href={url}
-        download={`${jobId}.xml`}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-cyan-500"
-      >
-        <Download className="h-4 w-4" />
-        Download output.xml
-      </a>
-      <p className="mt-2 text-[11px] text-slate-500">
-        Or open:{" "}
-        <a href={url} className="text-cyan-400 underline" target="_blank" rel="noreferrer">
-          {url}
-        </a>
-      </p>
-      <p className="mt-1 text-[11px] text-slate-600">
-        Server file: backend/data/outputs/{jobId}.xml
-      </p>
-    </div>
-  );
 }
 
 export default function ChatAgent() {
@@ -44,14 +16,16 @@ export default function ChatAgent() {
       id: "welcome",
       role: "assistant",
       content:
-        "Hi — I'm your IEEE XML conversion agent.\n\nAttach your IEEE PDF and XML template (paperclip), then send.\n\nWhen done, use **Download output.xml** in my reply (or the green bar at the bottom).",
+        "Attach PDF + XML template, then send to convert.\n\nAfter conversion you will get a **preview** — download when happy, or type fixes here and send again (no need to re-attach files).",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [sessionPdf, setSessionPdf] = useState<File | null>(null);
+  const [sessionTemplate, setSessionTemplate] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
-  const [readyJobId, setReadyJobId] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const finalizedJobs = useRef<Set<string>>(new Set());
 
@@ -90,6 +64,22 @@ export default function ChatAgent() {
     [scrollToBottom],
   );
 
+  const showPreview = useCallback(
+    (jobId: string, xml: string, errors: string[], assistantId: string, logLines: string[]) => {
+      setActiveJobId(jobId);
+      updateMessage(assistantId, {
+        content: `${logLines.join("\n")}\n\n✅ Ready for preview. Download or send fixes below.`,
+        streaming: false,
+        children: (
+          <OutputPreviewPanel jobId={jobId} xml={xml} validationErrors={errors} />
+        ),
+      });
+      setSending(false);
+      toast.success("Preview ready — review XML, then download or ask for fixes");
+    },
+    [updateMessage],
+  );
+
   const finalizeJob = useCallback(
     async (jobId: string, assistantId: string, logLines: string[]) => {
       if (finalizedJobs.current.has(jobId)) return;
@@ -97,28 +87,54 @@ export default function ChatAgent() {
         const job = await getJob(jobId);
         if (job.status !== "completed") return;
         finalizedJobs.current.add(jobId);
-        let validNote = "";
+        let xml = "";
+        let errors: string[] = [];
         try {
           const result = await getResult(jobId);
-          validNote = result.validation?.valid ? "Validation passed." : "Validation has warnings.";
+          xml = result.xml_content || "";
+          errors = result.validation?.errors || [];
         } catch {
-          validNote = "Output file is ready (preview API skipped).";
+          const res = await fetch(downloadUrl(jobId));
+          xml = await res.text();
         }
-        setReadyJobId(jobId);
-        updateMessage(assistantId, {
-          content: `${logLines.join("\n")}\n\n✅ Conversion complete. ${validNote}`,
-          streaming: false,
-          children: <DownloadPanel jobId={jobId} />,
-        });
-        setSending(false);
-        setAttachments([]);
-        toast.success("XML ready — click Download output.xml");
+        showPreview(jobId, xml, errors, assistantId, logLines);
       } catch (e) {
         toast.error(`Could not load result: ${e}`);
+        setSending(false);
       }
     },
-    [updateMessage],
+    [showPreview],
   );
+
+  const runRefine = async (jobId: string, instruction: string) => {
+    setSending(true);
+    appendMessage({ role: "user", content: instruction });
+    const assistantId = appendMessage({
+      role: "assistant",
+      content: "Applying your fixes…",
+      streaming: true,
+    });
+    try {
+      const result = await refineJob(jobId, instruction);
+      const errors = result.validation?.errors || [];
+      updateMessage(assistantId, {
+        content: "✅ Updated XML based on your message.",
+        streaming: false,
+        children: (
+          <OutputPreviewPanel
+            jobId={jobId}
+            xml={result.xml_content}
+            validationErrors={errors}
+          />
+        ),
+      });
+      toast.success("XML updated — check preview");
+    } catch (e) {
+      updateMessage(assistantId, { content: `✗ ${String(e)}`, streaming: false });
+    } finally {
+      setSending(false);
+    }
+  };
 
   const onAddFiles = (files: FileList | null) => {
     if (!files) return;
@@ -138,22 +154,36 @@ export default function ChatAgent() {
     setAttachments(next);
   };
 
-  const pdf = attachments.find((a) => a.kind === "pdf")?.file;
-  const template = attachments.find((a) => a.kind === "xml")?.file;
-  const sendDisabled = !pdf || !template || sending;
+  const pdf = attachments.find((a) => a.kind === "pdf")?.file ?? sessionPdf;
+  const template = attachments.find((a) => a.kind === "xml")?.file ?? sessionTemplate;
+  const hasNewAttachments = attachments.some((a) => a.kind === "pdf") && attachments.some((a) => a.kind === "xml");
+  const canRefine = Boolean(activeJobId && input.trim() && !hasNewAttachments);
+  const canConvert = Boolean(pdf && template);
+  const sendDisabled = sending || (!canRefine && !canConvert);
 
   const onSend = async () => {
-    const text = input.trim() || "Convert the attached IEEE PDF to the XML template.";
+    const text = input.trim();
+
+    if (canRefine) {
+      setInput("");
+      await runRefine(activeJobId!, text);
+      return;
+    }
+
     if (!pdf || !template) {
-      toast.error("Attach both PDF and XML template first");
+      toast.error("Attach PDF and XML template for a new conversion");
       return;
     }
 
     setSending(true);
-    setReadyJobId(null);
     setInput("");
-    const attachNote = attachments.map((a) => `📎 ${a.file.name}`).join("\n");
-    appendMessage({ role: "user", content: `${text}\n\n${attachNote}` });
+    setSessionPdf(pdf);
+    setSessionTemplate(template);
+    setAttachments([]);
+    finalizedJobs.current.clear();
+
+    const attachNote = `📎 ${pdf.name}\n📎 ${template.name}`;
+    appendMessage({ role: "user", content: `${text || "Convert PDF to XML template."}\n\n${attachNote}` });
 
     const assistantId = appendMessage({
       role: "assistant",
@@ -214,20 +244,21 @@ export default function ChatAgent() {
       };
       void poll();
     } catch (e) {
-      updateMessage(assistantId, {
-        content: `✗ ${String(e)}`,
-        streaming: false,
-      });
+      updateMessage(assistantId, { content: `✗ ${String(e)}`, streaming: false });
       setSending(false);
     }
   };
+
+  const composerMode = activeJobId ? "followup" : "convert";
 
   return (
     <div className="flex h-screen flex-col bg-slate-950">
       <header className="flex shrink-0 items-center justify-center border-b border-slate-800 py-3">
         <div className="text-center">
           <h1 className="text-sm font-semibold text-slate-100">IEEE XML Converter</h1>
-          <p className="text-[11px] text-slate-500">Schema-adaptive LLM agent</p>
+          <p className="text-[11px] text-slate-500">
+            {activeJobId ? "Preview → download → or chat to fix" : "PDF + template → convert"}
+          </p>
         </div>
       </header>
 
@@ -239,22 +270,6 @@ export default function ChatAgent() {
         </div>
       </div>
 
-      {readyJobId && (
-        <div className="shrink-0 border-t border-cyan-900/50 bg-cyan-950/80 px-4 py-3">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-            <span className="text-sm text-cyan-100">Output ready</span>
-            <a
-              href={downloadUrl(readyJobId)}
-              download={`${readyJobId}.xml`}
-              className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium hover:bg-cyan-500"
-            >
-              <Download className="h-4 w-4" />
-              Download XML
-            </a>
-          </div>
-        </div>
-      )}
-
       <div className="mx-auto w-full max-w-3xl shrink-0">
         <ChatComposer
           value={input}
@@ -265,6 +280,12 @@ export default function ChatAgent() {
           onRemoveAttachment={(id) => setAttachments((a) => a.filter((x) => x.id !== id))}
           sendDisabled={sendDisabled}
           sending={sending}
+          mode={composerMode}
+          sessionHint={
+            activeJobId && sessionPdf && sessionTemplate
+              ? `Session: ${sessionPdf.name} + ${sessionTemplate.name}`
+              : undefined
+          }
         />
       </div>
     </div>
