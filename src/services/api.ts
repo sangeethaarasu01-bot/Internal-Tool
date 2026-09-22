@@ -1,6 +1,6 @@
-const PROD_API = "https://internal-tool-backend-x10p.onrender.com";
-const fromEnv = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-const API_BASE = fromEnv || (import.meta.env.PROD ? PROD_API : "");
+import { resolveApiBaseUrl } from "../lib/apiBase";
+
+const API_BASE = resolveApiBaseUrl();
 
 export type ConversionStatusValue =
   | "pending"

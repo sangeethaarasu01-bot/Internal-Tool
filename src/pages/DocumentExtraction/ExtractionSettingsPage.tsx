@@ -1,10 +1,9 @@
 import { Footer } from "../../components/Layout/Footer";
+import { PRODUCTION_API_URL, resolveApiBaseUrl } from "../../lib/apiBase";
 
 const API_BASE =
-  String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "") ||
-  (import.meta.env.PROD
-    ? "https://internal-tool-backend-x10p.onrender.com"
-    : "(dev proxy → http://127.0.0.1:8000)");
+  resolveApiBaseUrl() ||
+  (import.meta.env.PROD ? PRODUCTION_API_URL : "(dev proxy → http://127.0.0.1:8000)");
 
 export const ExtractionSettingsPage = () => (
   <>

@@ -1,7 +1,8 @@
 import axios from "axios";
 import type { Client, Job, MappingPlan, SchemaMap } from "../types";
+import { resolveApiBaseUrl } from "./apiBase";
 
-const base = import.meta.env.VITE_API_URL || "";
+const base = resolveApiBaseUrl();
 
 const http = axios.create({ baseURL: base });
 

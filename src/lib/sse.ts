@@ -1,6 +1,7 @@
 import type { AgentEvent } from "../types";
+import { resolveApiBaseUrl } from "./apiBase";
 
-const base = import.meta.env.VITE_API_URL || "";
+const base = resolveApiBaseUrl();
 
 export function subscribeToJob(jobId: string, onEvent: (event: AgentEvent) => void): () => void {
   const url = `${base}/api/stream/${jobId}`;
