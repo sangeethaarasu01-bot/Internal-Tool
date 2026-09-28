@@ -3,7 +3,18 @@ import { resolveApiBaseUrl } from "./apiBase";
 
 const base = resolveApiBaseUrl();
 
-export function subscribeToJob(jobId: string, onEvent: (event: AgentEvent) => void): () => void {
+/** Production: skip EventSource (long connections die on Render); use job polling instead. */
+export function shouldUseJobStream(): boolean {
+  return import.meta.env.DEV;
+}
+
+export function subscribeToJob(
+  jobId: string,
+  onEvent: (event: AgentEvent) => void,
+): () => void {
+  if (!shouldUseJobStream()) {
+    return () => {};
+  }
   const url = `${base}/api/stream/${jobId}`;
   const es = new EventSource(url);
 

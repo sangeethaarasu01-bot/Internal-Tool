@@ -11,14 +11,17 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** SSE is flaky on Render (long connections / restarts). Production uses job polling only. */
-const USE_SSE_STREAM = import.meta.env.DEV;
-
 function jobProgressLine(job: Job): string | null {
   if (job.status !== "processing") return null;
   const stage = job.stage?.trim() || "working";
   const pct = typeof job.progress === "number" ? ` (${job.progress}%)` : "";
   return `▸ ${stage}${pct}`;
+}
+
+function syncJobProgressLog(logLines: string[], job: Job) {
+  const line = jobProgressLine(job);
+  if (!line || logLines[logLines.length - 1] === line) return;
+  logLines.push(line);
 }
 
 function isLikelyGatewayError(err: unknown): boolean {
@@ -240,9 +243,16 @@ export default function ChatAgent() {
       });
 
       const poll = async () => {
+        let gatewayErrors = 0;
         for (let i = 0; i < 600; i++) {
           try {
             const job = await getJob(job_id);
+            gatewayErrors = 0;
+            syncJobProgressLog(logLines, job);
+            updateMessage(assistantId, {
+              content: logLines.join("\n") || "Working…",
+              streaming: true,
+            });
             if (job.status === "completed") {
               unsub();
               await finalizeJob(job_id, assistantId, [...logLines]);
@@ -257,8 +267,24 @@ export default function ChatAgent() {
               setSending(false);
               return;
             }
-          } catch {
-            /* network blip — keep polling (SSE may also reconnect) */
+          } catch (err) {
+            if (isLikelyGatewayError(err)) {
+              gatewayErrors += 1;
+            }
+            if (gatewayErrors >= 5) {
+              unsub();
+              updateMessage(assistantId, {
+                content:
+                  `${logLines.join("\n")}\n\n✗ Server restarted or timed out (502). ` +
+                  "Render free tier may run out of memory on large PDFs. " +
+                  "Retry with a smaller PDF or upgrade backend RAM. Job id: " +
+                  job_id,
+                streaming: false,
+              });
+              setSending(false);
+              toast.error("Backend unavailable — check Render logs for OOM");
+              return;
+            }
           }
           await new Promise((r) => setTimeout(r, 2000));
         }
