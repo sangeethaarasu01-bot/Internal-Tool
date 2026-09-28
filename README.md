@@ -7,4 +7,4 @@ npm install
 npm run dev
 ```
 
-Set `VITE_API_URL=http://localhost:8000` or use the dev proxy (default).
+Set `VITE_API_URL=https://internal-tool-backend-x10p.onrender.com` (default in `.env.development`) or use the dev proxy with `VITE_USE_DEV_PROXY=true` and empty `VITE_API_URL`.

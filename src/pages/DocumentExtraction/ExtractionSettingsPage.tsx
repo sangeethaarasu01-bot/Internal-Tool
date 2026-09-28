@@ -1,7 +1,9 @@
 import { Footer } from "../../components/Layout/Footer";
 import { resolveApiBaseUrl } from "../../lib/apiBase";
 
-const API_BASE = resolveApiBaseUrl() || "(dev proxy → http://127.0.0.1:8000)";
+const API_BASE =
+  resolveApiBaseUrl() ||
+  "(dev proxy → http://127.0.0.1:8000 via VITE_USE_DEV_PROXY)";
 
 export const ExtractionSettingsPage = () => (
   <>
