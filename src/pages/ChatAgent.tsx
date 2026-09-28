@@ -5,11 +5,29 @@ import ChatMessage, { type ChatMessageData } from "../components/chat/ChatMessag
 import OutputPreviewPanel from "../components/chat/OutputPreviewPanel";
 import { downloadUrl, getJob, getResult, refineJob, startConvert, uploadFiles } from "../lib/api";
 import { subscribeToJob } from "../lib/sse";
+import type { Job } from "../types";
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** SSE is flaky on Render (long connections / restarts). Production uses job polling only. */
+const USE_SSE_STREAM = import.meta.env.DEV;
+
+function jobProgressLine(job: Job): string | null {
+  if (job.status !== "processing") return null;
+  const stage = job.stage?.trim() || "working";
+  const pct = typeof job.progress === "number" ? ` (${job.progress}%)` : "";
+  return `▸ ${stage}${pct}`;
+}
+
+function isLikelyGatewayError(err: unknown): boolean {
+  if (err && typeof err === "object" && "response" in err) {
+    const status = (err as { response?: { status?: number } }).response?.status;
+    return status === 502 || status === 503 || status === 504;
+  }
+  return false;
+}
 export default function ChatAgent() {
   const [messages, setMessages] = useState<ChatMessageData[]>([
     {
@@ -222,23 +240,27 @@ export default function ChatAgent() {
       });
 
       const poll = async () => {
-        for (let i = 0; i < 120; i++) {
-          const job = await getJob(job_id);
-          if (job.status === "completed") {
-            unsub();
-            await finalizeJob(job_id, assistantId, [...logLines]);
-            return;
+        for (let i = 0; i < 600; i++) {
+          try {
+            const job = await getJob(job_id);
+            if (job.status === "completed") {
+              unsub();
+              await finalizeJob(job_id, assistantId, [...logLines]);
+              return;
+            }
+            if (job.status === "failed") {
+              unsub();
+              updateMessage(assistantId, {
+                content: `${logLines.join("\n")}\n\n✗ Failed: ${job.error || "Unknown error"}`,
+                streaming: false,
+              });
+              setSending(false);
+              return;
+            }
+          } catch {
+            /* network blip — keep polling (SSE may also reconnect) */
           }
-          if (job.status === "failed") {
-            unsub();
-            updateMessage(assistantId, {
-              content: `${logLines.join("\n")}\n\n✗ Failed: ${job.error || "Unknown error"}`,
-              streaming: false,
-            });
-            setSending(false);
-            return;
-          }
-          await new Promise((r) => setTimeout(r, 1200));
+          await new Promise((r) => setTimeout(r, 2000));
         }
         setSending(false);
       };
