@@ -6,18 +6,26 @@ interface Props {
   jobId: string;
   xml: string;
   validationErrors: string[];
+  downloadFilename?: string;
   onDownload?: () => void;
 }
 
-export default function OutputPreviewPanel({ jobId, xml, validationErrors, onDownload }: Props) {
+export default function OutputPreviewPanel({
+  jobId,
+  xml,
+  validationErrors,
+  downloadFilename,
+  onDownload,
+}: Props) {
   const url = downloadUrl(jobId);
+  const downloadName = downloadFilename || `${jobId}.xml`;
   return (
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-cyan-100">Preview output XML</p>
         <a
           href={url}
-          download={`${jobId}.xml`}
+          download={downloadName}
           onClick={onDownload}
           className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white hover:bg-cyan-500"
         >

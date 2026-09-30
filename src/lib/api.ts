@@ -41,6 +41,13 @@ export interface JobResult {
   tokens: number;
   error: string | null;
   download_url?: string;
+  download_filename?: string;
+}
+
+/** Match backend: `access-kakichi-3657695-proof.pdf` → `access-kakichi-3657695-proof.xml` */
+export function pdfToXmlDownloadName(pdfFilename: string): string {
+  const base = pdfFilename.replace(/\.pdf$/i, "").trim() || "article";
+  return `${base}.xml`;
 }
 
 export async function getResult(id: string): Promise<JobResult> {

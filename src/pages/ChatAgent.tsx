@@ -3,7 +3,15 @@ import { toast } from "sonner";
 import ChatComposer, { type AttachedFile } from "../components/chat/ChatComposer";
 import ChatMessage, { type ChatMessageData } from "../components/chat/ChatMessage";
 import OutputPreviewPanel from "../components/chat/OutputPreviewPanel";
-import { downloadUrl, getJob, getResult, refineJob, startConvert, uploadFiles } from "../lib/api";
+import {
+  downloadUrl,
+  getJob,
+  getResult,
+  pdfToXmlDownloadName,
+  refineJob,
+  startConvert,
+  uploadFiles,
+} from "../lib/api";
 import { subscribeToJob } from "../lib/sse";
 import type { Job } from "../types";
 
@@ -86,13 +94,25 @@ export default function ChatAgent() {
   );
 
   const showPreview = useCallback(
-    (jobId: string, xml: string, errors: string[], assistantId: string, logLines: string[]) => {
+    (
+      jobId: string,
+      xml: string,
+      errors: string[],
+      assistantId: string,
+      logLines: string[],
+      downloadFilename: string,
+    ) => {
       setActiveJobId(jobId);
       updateMessage(assistantId, {
         content: `${logLines.join("\n")}\n\n✅ Ready for preview. Download or send fixes below.`,
         streaming: false,
         children: (
-          <OutputPreviewPanel jobId={jobId} xml={xml} validationErrors={errors} />
+          <OutputPreviewPanel
+            jobId={jobId}
+            xml={xml}
+            validationErrors={errors}
+            downloadFilename={downloadFilename}
+          />
         ),
       });
       setSending(false);
@@ -110,15 +130,19 @@ export default function ChatAgent() {
         finalizedJobs.current.add(jobId);
         let xml = "";
         let errors: string[] = [];
+        let downloadFilename = pdfToXmlDownloadName(job.pdf_filename);
         try {
           const result = await getResult(jobId);
           xml = result.xml_content || "";
           errors = result.validation?.errors || [];
+          if (result.download_filename) {
+            downloadFilename = result.download_filename;
+          }
         } catch {
           const res = await fetch(downloadUrl(jobId));
           xml = await res.text();
         }
-        showPreview(jobId, xml, errors, assistantId, logLines);
+        showPreview(jobId, xml, errors, assistantId, logLines, downloadFilename);
       } catch (e) {
         toast.error(`Could not load result: ${e}`);
         setSending(false);
@@ -138,6 +162,9 @@ export default function ChatAgent() {
     try {
       const result = await refineJob(jobId, instruction);
       const errors = result.validation?.errors || [];
+      const job = await getJob(jobId);
+      const downloadFilename =
+        result.download_filename || pdfToXmlDownloadName(job.pdf_filename);
       updateMessage(assistantId, {
         content: "✅ Updated XML based on your message.",
         streaming: false,
@@ -146,6 +173,7 @@ export default function ChatAgent() {
             jobId={jobId}
             xml={result.xml_content}
             validationErrors={errors}
+            downloadFilename={downloadFilename}
           />
         ),
       });
