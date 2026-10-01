@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import ChatComposer, { type AttachedFile } from "../components/chat/ChatComposer";
 import ChatMessage, { type ChatMessageData } from "../components/chat/ChatMessage";
@@ -11,6 +11,7 @@ import {
   refineJob,
   startConvert,
   uploadFiles,
+  warmBackend,
 } from "../lib/api";
 import { subscribeToJob } from "../lib/sse";
 import type { Job } from "../types";
@@ -40,6 +41,10 @@ function isLikelyGatewayError(err: unknown): boolean {
   return false;
 }
 export default function ChatAgent() {
+  useEffect(() => {
+    void warmBackend();
+  }, []);
+
   const [messages, setMessages] = useState<ChatMessageData[]>([
     {
       id: "welcome",
@@ -243,7 +248,22 @@ export default function ChatAgent() {
     const logLines: string[] = [];
 
     try {
+      updateMessage(assistantId, {
+        content: "Connecting to API server (production may take up to 1–2 min if asleep)…",
+        streaming: true,
+      });
+      const awake = await warmBackend();
+      const sizeMb = ((pdf.size + template.size) / (1024 * 1024)).toFixed(1);
+      updateMessage(assistantId, {
+        content: `${awake ? "API ready." : "API slow to respond — still trying…"}\nUploading ${sizeMb} MB…`,
+        streaming: true,
+      });
       const { job_id } = await uploadFiles(pdf, template);
+      logLines.push("✓ Upload complete");
+      updateMessage(assistantId, {
+        content: `${logLines.join("\n")}\nStarting conversion…`,
+        streaming: true,
+      });
       await startConvert(job_id);
 
       const unsub = subscribeToJob(job_id, (ev) => {

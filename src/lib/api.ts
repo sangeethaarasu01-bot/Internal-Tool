@@ -4,7 +4,21 @@ import { resolveApiBaseUrl } from "./apiBase";
 
 const base = resolveApiBaseUrl();
 
-const http = axios.create({ baseURL: base });
+/** Large PDFs + Render cold start can take 1–2 minutes before bytes finish uploading. */
+const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+const WAKE_TIMEOUT_MS = 120 * 1000;
+
+const http = axios.create({ baseURL: base, timeout: UPLOAD_TIMEOUT_MS });
+
+/** Render free tier sleeps; ping wakes the service before a heavy upload. */
+export async function warmBackend(): Promise<boolean> {
+  try {
+    await http.get("/health", { timeout: WAKE_TIMEOUT_MS });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function uploadFiles(
   pdf: File,
@@ -15,7 +29,9 @@ export async function uploadFiles(
   form.append("pdf", pdf);
   if (template) form.append("template", template);
   if (clientId) form.append("client_id", clientId);
-  const { data } = await http.post("/api/upload", form);
+  const { data } = await http.post("/api/upload", form, {
+    timeout: UPLOAD_TIMEOUT_MS,
+  });
   return data;
 }
 
