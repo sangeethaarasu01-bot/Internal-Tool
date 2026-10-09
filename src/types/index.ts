@@ -84,3 +84,18 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
 }
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => void;
+}

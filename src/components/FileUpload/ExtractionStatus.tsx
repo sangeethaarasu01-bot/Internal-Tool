@@ -10,9 +10,16 @@ export type ExtractionUiStatus =
 interface ExtractionStatusProps {
   status: ExtractionUiStatus;
   message?: string;
+  progress?: number | null;
+  currentStep?: string | null;
 }
 
-export const ExtractionStatus = ({ status, message }: ExtractionStatusProps) => {
+export const ExtractionStatus = ({
+  status,
+  message,
+  progress,
+  currentStep,
+}: ExtractionStatusProps) => {
   const icon = (() => {
     switch (status) {
       case "uploading":
@@ -60,7 +67,21 @@ export const ExtractionStatus = ({ status, message }: ExtractionStatusProps) => 
         {icon}
         <div>
           <strong>{title}</strong>
+          {currentStep && (status === "uploading" || status === "extracting") ? (
+            <p className="text-sm text-gray-600">{currentStep}</p>
+          ) : null}
           <p>{message || "Select a PDF and click Extract Text to begin."}</p>
+          {typeof progress === "number" &&
+          progress > 0 &&
+          (status === "uploading" || status === "extracting") ? (
+            <div className="extraction-progress-bar" aria-label="Extraction progress">
+              <div
+                className="extraction-progress-bar__fill"
+                style={{ width: `${Math.min(100, progress)}%` }}
+              />
+              <span className="extraction-progress-bar__label">{progress}%</span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

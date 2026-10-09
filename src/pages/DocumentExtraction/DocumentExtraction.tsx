@@ -34,6 +34,19 @@ function formatNumber(value: number): string {
   return value.toLocaleString("en-US");
 }
 
+function describeMappingSource(source: string): string {
+  if (source === "ir_adapter" || source === "ir_adapter_fallback") {
+    return "Heuristic mapping (no LLM)";
+  }
+  if (source.startsWith("cached")) {
+    return "Cached mapping";
+  }
+  if (source === "llm") {
+    return "LLM semantic mapping";
+  }
+  return source;
+}
+
 function LayoutBlockCard({
   block,
   page,
@@ -76,6 +89,8 @@ export const DocumentExtraction = () => {
   const [useLlm, setUseLlm] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatedXml, setGeneratedXml] = useState<GenerateXmlResponse | null>(null);
+  const [pollProgress, setPollProgress] = useState<number | null>(null);
+  const [pollStep, setPollStep] = useState<string | null>(null);
 
   const isBusy = status === "uploading" || status === "extracting" || scopeLoading || generating;
 
@@ -135,6 +150,8 @@ export const DocumentExtraction = () => {
     }
 
     setResult(null);
+    setPollProgress(null);
+    setPollStep(null);
     try {
       setStatus("uploading");
       setMessage("Uploading PDF to extraction service...");
@@ -143,8 +160,12 @@ export const DocumentExtraction = () => {
       setStatus("extracting");
       setMessage("Running Stage 1 layout-aware text extraction...");
       const record = await pollExtraction(started.extraction_id, (tick) => {
-        if (tick.status === "processing") {
-          setMessage("Extracting pages, blocks, lines, and spans...");
+        if (tick.progress != null) setPollProgress(tick.progress);
+        if (tick.current_step) setPollStep(tick.current_step);
+        if (tick.status === "queued") {
+          setMessage("Waiting for extraction worker…");
+        } else if (tick.status === "processing") {
+          setMessage(tick.current_step ?? "Extracting pages, blocks, lines, and spans…");
         }
       });
 
@@ -262,10 +283,12 @@ export const DocumentExtraction = () => {
       setGeneratedXml(response);
       setActiveTab("final_xml");
       setStatus("completed");
+      const modeLabel = describeMappingSource(response.mapping_source);
+      const warning =
+        response.warnings.find((w) => !w.toLowerCase().includes("api key")) ??
+        response.warnings[0];
       setMessage(
-        `IEEE JATS XML generated (${response.mapping_source}). ${
-          response.warnings.length ? response.warnings[0] : ""
-        }`.trim(),
+        `IEEE JATS XML generated — ${modeLabel}.${warning ? ` ${warning}` : ""}`.trim(),
       );
     } catch (error) {
       setStatus("failed");
@@ -289,7 +312,7 @@ export const DocumentExtraction = () => {
           </h1>
           <p>
             Upload PDF + template XML → extract content → generate downloadable IEEE JATS XML.
-            Enable LLM for template-flexible mapping across clients.
+            Uses heuristic mapping by default (no API keys). Optional LLM toggle below.
           </p>
         </div>
       </header>
@@ -330,7 +353,12 @@ export const DocumentExtraction = () => {
             {status === "uploading" || status === "extracting" ? "Extracting..." : "Extract Text"}
           </button>
         </div>
-        <ExtractionStatus status={status} message={message} />
+        <ExtractionStatus
+          status={status}
+          message={message}
+          progress={pollProgress}
+          currentStep={pollStep}
+        />
       </section>
 
       {extractionId && templateId ? (
@@ -348,7 +376,7 @@ export const DocumentExtraction = () => {
                 onChange={(event) => setUseLlm(event.target.checked)}
                 disabled={isBusy}
               />
-              Use LLM semantic mapping (requires ANTHROPIC_API_KEY or OPENAI_API_KEY on backend)
+              Use LLM semantic mapping (optional — requires API key on backend)
             </label>
             <button
               className="convert-button"

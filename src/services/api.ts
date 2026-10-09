@@ -101,6 +101,10 @@ export async function retryConversion(id: string): Promise<void> {
   if (!res.ok) throw new Error(await parseError(res));
 }
 
+export function extractionXmlDownloadUrl(extractionId: string): string {
+  return `${API_BASE}/api/extractions/${extractionId}/download-xml`;
+}
+
 export function downloadXmlFile(filename: string, xml: string) {
   const cleaned = xml.replace(/^\uFEFF/, "");
   const blob = new Blob([cleaned], { type: "application/xml;charset=utf-8" });
@@ -143,12 +147,23 @@ export interface ExtractionRecord {
   filename: string;
   original_filename?: string;
   status: ExtractionStatusValue;
+  progress?: number;
+  current_step?: string | null;
   page_count?: number | null;
   requires_ocr?: boolean | null;
   ocr_applied?: boolean;
   error_message?: string | null;
   scope?: DocumentScope;
   template_id?: string | null;
+}
+
+/** Poll every 3s; default max wait 10 min (large PDFs). Override with VITE_EXTRACTION_POLL_MAX_MS. */
+export const EXTRACTION_POLL_INTERVAL_MS = 3000;
+
+export function extractionPollMaxMs(): number {
+  const fromEnv = Number(import.meta.env.VITE_EXTRACTION_POLL_MAX_MS);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return 10 * 60 * 1000;
 }
 
 export interface ScopeResponse {
@@ -320,15 +335,22 @@ export async function pollExtraction(
   id: string,
   onTick?: (record: ExtractionRecord) => void,
 ): Promise<ExtractionRecord> {
-  for (let i = 0; i < 90; i += 1) {
+  const deadline = Date.now() + extractionPollMaxMs();
+  let last: ExtractionRecord | null = null;
+  while (Date.now() < deadline) {
     const record = await getExtraction(id);
+    last = record;
     onTick?.(record);
     if (record.status === "completed" || record.status === "failed") {
       return record;
     }
-    await sleep(1000);
+    await sleep(EXTRACTION_POLL_INTERVAL_MS);
   }
-  throw new Error("Extraction timed out.");
+  const step = last?.current_step ? ` Last step: ${last.current_step}.` : "";
+  const mins = Math.round(extractionPollMaxMs() / 60000);
+  throw new Error(
+    `Extraction timed out after ${mins} minutes.${step} Try again — very large PDFs may need VITE_EXTRACTION_POLL_MAX_MS.`,
+  );
 }
 
 export async function uploadExtractionTemplate(

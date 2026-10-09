@@ -1,9 +1,11 @@
 import { Download } from "lucide-react";
 import XmlPreview from "../XmlPreview";
 import { downloadUrl } from "../../lib/api";
+import { extractionXmlDownloadUrl } from "../../services/api";
 
 interface Props {
-  jobId: string;
+  jobId?: string;
+  extractionId?: string;
   xml: string;
   validationErrors: string[];
   downloadFilename?: string;
@@ -12,13 +14,20 @@ interface Props {
 
 export default function OutputPreviewPanel({
   jobId,
+  extractionId,
   xml,
   validationErrors,
   downloadFilename,
   onDownload,
 }: Props) {
-  const url = downloadUrl(jobId);
-  const downloadName = downloadFilename || `${jobId}.xml`;
+  const url =
+    extractionId != null
+      ? extractionXmlDownloadUrl(extractionId)
+      : jobId != null
+        ? downloadUrl(jobId)
+        : "#";
+  const downloadName =
+    downloadFilename || (extractionId ? `${extractionId}.xml` : jobId ? `${jobId}.xml` : "output.xml");
   return (
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">

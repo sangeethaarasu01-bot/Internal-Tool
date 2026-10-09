@@ -764,6 +764,29 @@ padding: 1.75rem;
   gap: 9px;
 }
 
+.extraction-progress-bar {
+  position: relative;
+  margin-top: 0.75rem;
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.extraction-progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.extraction-progress-bar__label {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
 .status-container {
    margin-top: 1.5rem;
   padding: 1.25rem;
