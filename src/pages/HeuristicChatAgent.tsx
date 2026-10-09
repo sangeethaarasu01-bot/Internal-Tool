@@ -20,6 +20,12 @@ function pdfToXmlName(pdfName: string): string {
   return pdfName.replace(/\.pdf$/i, "") + ".xml";
 }
 
+function isDocBookTemplate(schema: Record<string, unknown> | undefined): boolean {
+  if (!schema) return false;
+  if (schema.template_format === "docbook_5_book") return true;
+  return schema.root_tag === "book";
+}
+
 export default function HeuristicChatAgent() {
   useEffect(() => {
     void warmBackend();
@@ -30,7 +36,7 @@ export default function HeuristicChatAgent() {
       id: "welcome",
       role: "assistant",
       content:
-        "Attach a **PDF** and **IEEE JATS template XML**, then send to convert.\n\n" +
+        "Attach a **PDF** and **template XML** (IEEE JATS `<article>` or DocBook 5 `<book>`), then send to convert.\n\n" +
         "Runs in **heuristic mode** (no LLM API key). You will get a preview and download when complete.",
       timestamp: new Date(),
     },
@@ -162,14 +168,19 @@ export default function HeuristicChatAgent() {
 
       logLines.push("▸ Uploading template…");
       updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
-      await uploadExtractionTemplate(started.extraction_id, template);
+      const templateUpload = await uploadExtractionTemplate(started.extraction_id, template);
       logLines.push("✓ Template linked");
+      const docBookTemplate = isDocBookTemplate(templateUpload.schema);
 
       logLines.push("▸ Applying scope…");
       updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
       await applyExtractionScope(started.extraction_id, "full");
 
-      logLines.push("▸ Generating IEEE JATS XML (heuristic mode)…");
+      logLines.push(
+        docBookTemplate
+          ? "▸ Generating DocBook 5 XML (heuristic mode)…"
+          : "▸ Generating IEEE JATS XML (heuristic mode)…",
+      );
       updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
       const generated = await generateExtractionXml(started.extraction_id, {
         scope: "full",
