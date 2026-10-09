@@ -359,6 +359,24 @@ export async function pollExtraction(
   );
 }
 
+export async function clearExtractionTemplate(extractionId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/template`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function createTemplateFromSource(
+  extractionId: string,
+): Promise<TemplateUploadResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/extractions/${extractionId}/template/from-source`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export async function uploadExtractionTemplate(
   extractionId: string,
   file: File,
@@ -397,6 +415,7 @@ export interface GenerateXmlResponse {
   xml_content: string;
   warnings: string[];
   unmapped_content_count: number;
+  output_filename?: string | null;
 }
 
 export async function generateExtractionXml(

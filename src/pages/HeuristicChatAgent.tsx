@@ -8,6 +8,8 @@ import {
   generateExtractionXml,
   pollExtraction,
   startExtraction,
+  clearExtractionTemplate,
+  createTemplateFromSource,
   uploadExtractionTemplate,
 } from "../services/api";
 import { warmBackend } from "../lib/api";
@@ -36,7 +38,8 @@ export default function HeuristicChatAgent() {
       id: "welcome",
       role: "assistant",
       content:
-        "Attach a **PDF** and **template XML** (IEEE JATS `<article>` or DocBook 5 `<book>`), then send to convert.\n\n" +
+        "Attach a **PDF** and **matching template XML** for this book, then send to convert.\n\n" +
+        "You must attach **both files on every run** (a new PDF does not reuse the previous template).\n\n" +
         "Runs in **heuristic mode** (no LLM API key). You will get a preview and download when complete.",
       timestamp: new Date(),
     },
@@ -49,6 +52,7 @@ export default function HeuristicChatAgent() {
   const [activeExtractionId, setActiveExtractionId] = useState<string | null>(null);
   const [skipTablesFigures, setSkipTablesFigures] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const runGenerationRef = useRef(0);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -102,29 +106,40 @@ export default function HeuristicChatAgent() {
       }
       next = next.filter((a) => a.kind !== kind);
       next.push({ id: uid(), file, kind });
+      if (kind === "pdf") {
+        setSessionTemplate(null);
+      }
+      if (kind === "xml") {
+        setSessionPdf(null);
+      }
     }
     setAttachments(next);
   };
 
-  const pdf = attachments.find((a) => a.kind === "pdf")?.file ?? sessionPdf;
-  const template = attachments.find((a) => a.kind === "xml")?.file ?? sessionTemplate;
-  const canConvert = Boolean(pdf && template);
+  const pdf = attachments.find((a) => a.kind === "pdf")?.file;
+  const template = attachments.find((a) => a.kind === "xml")?.file;
+  const canConvert = Boolean(pdf);
   const sendDisabled = sending || !canConvert;
 
   const onSend = async () => {
-    if (!pdf || !template) {
-      toast.error("Attach PDF and XML template to convert");
+    if (!pdf) {
+      toast.error("Attach a PDF to convert");
       return;
     }
 
     setSending(true);
+    const runId = ++runGenerationRef.current;
     setInput("");
-    setSessionPdf(pdf);
-    setSessionTemplate(template);
+    const pdfForJob = pdf;
+    const templateForJob = template ?? null;
+    setSessionPdf(pdfForJob);
+    setSessionTemplate(templateForJob);
     setAttachments([]);
     setActiveExtractionId(null);
 
-    const attachNote = `📎 ${pdf.name}\n📎 ${template.name}`;
+    const attachNote = templateForJob
+      ? `📎 ${pdfForJob.name}\n📎 ${templateForJob.name}`
+      : `📎 ${pdfForJob.name}\n📎 (template will be generated from PDF metadata)`;
     appendMessage({
       role: "user",
       content: `${input.trim() || "Convert PDF to IEEE JATS XML."}\n\n${attachNote}`,
@@ -144,7 +159,8 @@ export default function HeuristicChatAgent() {
       logLines.push("▸ Uploading PDF…");
       updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
 
-      const started = await startExtraction(pdf, { skipTablesFigures });
+      const started = await startExtraction(pdfForJob, { skipTablesFigures });
+      if (runId !== runGenerationRef.current) return;
       setActiveExtractionId(started.extraction_id);
       logLines.push("✓ Upload complete");
       logLines.push("▸ Extracting text and layout…");
@@ -161,20 +177,46 @@ export default function HeuristicChatAgent() {
           streaming: true,
         });
       });
+      if (runId !== runGenerationRef.current) return;
       if (record.status === "failed") {
         throw new Error(record.error_message || "Extraction failed");
       }
       logLines.push("✓ Extraction complete");
 
-      logLines.push("▸ Uploading template…");
-      updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
-      const templateUpload = await uploadExtractionTemplate(started.extraction_id, template);
+      let templateUpload;
+      if (templateForJob) {
+        logLines.push("▸ Uploading template…");
+        updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
+        try {
+          templateUpload = await uploadExtractionTemplate(
+            started.extraction_id,
+            templateForJob,
+          );
+        } catch (uploadErr) {
+          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          if (msg.toLowerCase().includes("do not match")) {
+            await clearExtractionTemplate(started.extraction_id);
+            throw new Error(
+              `${msg} Clear the wrong XML file and attach the matching publisher template, ` +
+                `or send again with PDF only to auto-generate a template from this PDF's metadata.`,
+            );
+          }
+          throw uploadErr;
+        }
+      } else {
+        logLines.push("▸ Generating DocBook template from PDF metadata…");
+        updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
+        await clearExtractionTemplate(started.extraction_id);
+        templateUpload = await createTemplateFromSource(started.extraction_id);
+      }
+      if (runId !== runGenerationRef.current) return;
       logLines.push("✓ Template linked");
       const docBookTemplate = isDocBookTemplate(templateUpload.schema);
 
       logLines.push("▸ Applying scope…");
       updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
       await applyExtractionScope(started.extraction_id, "full");
+      if (runId !== runGenerationRef.current) return;
 
       logLines.push(
         docBookTemplate
@@ -187,9 +229,10 @@ export default function HeuristicChatAgent() {
         useLlm: false,
         llmFallback: true,
       });
+      if (runId !== runGenerationRef.current) return;
       logLines.push("✓ XML generated");
 
-      const downloadFilename = pdfToXmlName(pdf.name);
+      const downloadFilename = generated.output_filename ?? pdfToXmlName(pdfForJob.name);
       updateMessage(assistantId, {
         content: `${logLines.join("\n")}\n\n✅ Ready for preview. Download your XML below.`,
         streaming: false,

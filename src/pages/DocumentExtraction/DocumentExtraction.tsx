@@ -10,6 +10,8 @@ import { TemplateUpload } from "../../components/Hybrid/TemplateUpload";
 import { Footer } from "../../components/Layout/Footer";
 import {
   applyExtractionScope,
+  clearExtractionTemplate,
+  createTemplateFromSource,
   downloadXmlFile,
   generateExtractionXml,
   getExtractionText,
@@ -21,6 +23,7 @@ import {
   type GenerateXmlResponse,
   type OutputFormat,
   type PageExtraction,
+  type TemplateUploadResponse,
   type TextBlock,
 } from "../../services/api";
 import { TaggedBlockList } from "../../components/DocumentExtraction/TaggedBlockList";
@@ -92,14 +95,72 @@ export const DocumentExtraction = () => {
   const [useLlm, setUseLlm] = useState(false);
   const [skipTablesFigures, setSkipTablesFigures] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [templateBinding, setTemplateBinding] = useState(false);
   const [generatedXml, setGeneratedXml] = useState<GenerateXmlResponse | null>(null);
   const [pollProgress, setPollProgress] = useState<number | null>(null);
   const [pollStep, setPollStep] = useState<string | null>(null);
 
-  const isBusy = status === "uploading" || status === "extracting" || scopeLoading || generating;
+  const isBusy =
+    status === "uploading" ||
+    status === "extracting" ||
+    scopeLoading ||
+    generating ||
+    templateBinding;
+
+  const applyTemplateUpload = (templateResponse: TemplateUploadResponse) => {
+    setTemplateId(templateResponse.template_id);
+    const schema = templateResponse.schema as { template_format?: string; root_tag?: string };
+    const fmt =
+      schema.template_format ??
+      (schema.root_tag === "book" ? "docbook_5_book" : "ieee_jats_article");
+    setTemplateFormat(fmt);
+    setOutputFormat(fmt === "docbook_5_book" ? "docbook_5" : "auto");
+  };
+
+  const identityMismatchHint =
+    " Clear the wrong template (button below) or use “Generate template from PDF metadata”, then generate XML again.";
+
+  const handleTemplateFromSource = async () => {
+    if (!extractionId) {
+      setMessage("Run extraction first.");
+      return;
+    }
+    setTemplateBinding(true);
+    setMessage("Clearing prior template and building DocBook skeleton from this PDF's metadata…");
+    try {
+      await clearExtractionTemplate(extractionId);
+      const templateResponse = await createTemplateFromSource(extractionId);
+      applyTemplateUpload(templateResponse);
+      setGeneratedXml(null);
+      setMessage(
+        "Template bound from Phase 1 metadata for this job only. Generate XML when ready.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Template from source failed.");
+    } finally {
+      setTemplateBinding(false);
+    }
+  };
+
+  const handleClearTemplate = async () => {
+    if (!extractionId) return;
+    setTemplateBinding(true);
+    try {
+      await clearExtractionTemplate(extractionId);
+      setTemplateId(null);
+      setTemplateFormat(null);
+      setGeneratedXml(null);
+      setMessage("Template cleared for this extraction. Upload XML or generate from PDF metadata.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not clear template.");
+    } finally {
+      setTemplateBinding(false);
+    }
+  };
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
+    setTemplateFile(null);
     setStatus("idle");
     setMessage("PDF selected. Click Extract Text to run Stage 1 extraction.");
     setResult(null);
@@ -187,17 +248,23 @@ export const DocumentExtraction = () => {
 
       if (templateFile) {
         setMessage("Uploading XML template...");
-        const templateResponse = await uploadExtractionTemplate(
-          started.extraction_id,
-          templateFile,
-        );
-        setTemplateId(templateResponse.template_id);
-        const schema = templateResponse.schema as { template_format?: string; root_tag?: string };
-        const fmt =
-          schema.template_format ??
-          (schema.root_tag === "book" ? "docbook_5_book" : "ieee_jats_article");
-        setTemplateFormat(fmt);
-        setOutputFormat(fmt === "docbook_5_book" ? "docbook_5" : "auto");
+        try {
+          const templateResponse = await uploadExtractionTemplate(
+            started.extraction_id,
+            templateFile,
+          );
+          applyTemplateUpload(templateResponse);
+        } catch (uploadErr) {
+          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          if (msg.toLowerCase().includes("do not match")) {
+            await clearExtractionTemplate(started.extraction_id);
+            throw new Error(
+              `${msg} Use a publisher template for this PDF, or clear the XML file and use ` +
+                `"Generate template from PDF metadata" after extraction.`,
+            );
+          }
+          throw uploadErr;
+        }
       }
 
       setMessage("Applying scope filter...");
@@ -307,7 +374,12 @@ export const DocumentExtraction = () => {
       );
     } catch (error) {
       setStatus("failed");
-      setMessage(error instanceof Error ? error.message : "XML generation failed.");
+      const msg = error instanceof Error ? error.message : "XML generation failed.";
+      setMessage(
+        msg.toLowerCase().includes("do not match") || msg.includes("409")
+          ? `${msg}${identityMismatchHint}`
+          : msg,
+      );
     } finally {
       setGenerating(false);
     }
@@ -375,6 +447,50 @@ export const DocumentExtraction = () => {
           currentStep={pollStep}
         />
       </section>
+
+      {extractionId ? (
+        <section className="card conversion-card">
+          <div className="conversion-content">
+            <h2>Template binding</h2>
+            <p>
+              Templates are stored per extraction job in Mongo — retrying generate-xml without
+              rebinding keeps the old template (409 is expected). Clear and regenerate from this
+              PDF, or upload matching publisher XML.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
+              <button
+                type="button"
+                className="convert-button"
+                onClick={handleTemplateFromSource}
+                disabled={isBusy}
+              >
+                {templateBinding ? "Binding…" : "Generate template from PDF metadata"}
+              </button>
+              {templateId ? (
+                <button
+                  type="button"
+                  className="convert-button"
+                  onClick={handleClearTemplate}
+                  disabled={isBusy}
+                  style={{ opacity: 0.9 }}
+                >
+                  Clear template
+                </button>
+              ) : null}
+            </div>
+            {templateId ? (
+              <p style={{ fontSize: "0.9rem", marginBottom: "1rem" }}>
+                Bound template: <code>{templateId}</code>
+                {templateFormat ? ` (${templateFormat})` : ""}
+              </p>
+            ) : (
+              <p style={{ fontSize: "0.9rem", marginBottom: "1rem" }}>
+                No template bound yet — upload XML above or generate from PDF metadata.
+              </p>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {extractionId && templateId ? (
         <section className="card conversion-card">
