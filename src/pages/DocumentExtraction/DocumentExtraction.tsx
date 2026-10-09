@@ -87,6 +87,7 @@ export const DocumentExtraction = () => {
   const [selectedPage, setSelectedPage] = useState(1);
   const [tagLevel, setTagLevel] = useState<TagLevel>("blocks");
   const [useLlm, setUseLlm] = useState(false);
+  const [skipTablesFigures, setSkipTablesFigures] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatedXml, setGeneratedXml] = useState<GenerateXmlResponse | null>(null);
   const [pollProgress, setPollProgress] = useState<number | null>(null);

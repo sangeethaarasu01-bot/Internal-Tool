@@ -163,7 +163,7 @@ export const EXTRACTION_POLL_INTERVAL_MS = 3000;
 export function extractionPollMaxMs(): number {
   const fromEnv = Number(import.meta.env.VITE_EXTRACTION_POLL_MAX_MS);
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
-  return 10 * 60 * 1000;
+  return 20 * 60 * 1000;
 }
 
 export interface ScopeResponse {
@@ -304,13 +304,19 @@ export interface ExtractionResult {
   structure?: DocumentStructure | null;
 }
 
-export async function startExtraction(file: File): Promise<{
+export async function startExtraction(
+  file: File,
+  options?: { skipTablesFigures?: boolean },
+): Promise<{
   extraction_id: string;
   status: string;
   filename: string;
 }> {
   const form = new FormData();
   form.append("file", file);
+  if (options?.skipTablesFigures) {
+    form.append("skip_tables_figures", "true");
+  }
   const res = await fetch(`${API_BASE}/api/extractions`, {
     method: "POST",
     body: form,

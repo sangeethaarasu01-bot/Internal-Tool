@@ -41,6 +41,7 @@ export default function HeuristicChatAgent() {
   const [sessionTemplate, setSessionTemplate] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [activeExtractionId, setActiveExtractionId] = useState<string | null>(null);
+  const [skipTablesFigures, setSkipTablesFigures] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -137,7 +138,7 @@ export default function HeuristicChatAgent() {
       logLines.push("▸ Uploading PDF…");
       updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
 
-      const started = await startExtraction(pdf);
+      const started = await startExtraction(pdf, { skipTablesFigures });
       setActiveExtractionId(started.extraction_id);
       logLines.push("✓ Upload complete");
       logLines.push("▸ Extracting text and layout…");
@@ -224,6 +225,17 @@ export default function HeuristicChatAgent() {
         </div>
       </div>
 
+      <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-1">
+        <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={skipTablesFigures}
+            onChange={(e) => setSkipTablesFigures(e.target.checked)}
+            disabled={sending}
+          />
+          Skip tables/figures (faster for large books)
+        </label>
+      </div>
       <div className="mx-auto w-full max-w-3xl shrink-0">
         <ChatComposer
           value={input}
