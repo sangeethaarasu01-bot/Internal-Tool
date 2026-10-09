@@ -386,11 +386,14 @@ export async function applyExtractionScope(
   return res.json();
 }
 
+export type OutputFormat = "auto" | "ieee_jats" | "docbook_5";
+
 export interface GenerateXmlResponse {
   document_id: string;
   scope: DocumentScope;
   mapping_source: string;
   prompt_version?: string | null;
+  output_format: string;
   xml_content: string;
   warnings: string[];
   unmapped_content_count: number;
@@ -398,7 +401,12 @@ export interface GenerateXmlResponse {
 
 export async function generateExtractionXml(
   extractionId: string,
-  options?: { scope?: DocumentScope; useLlm?: boolean; llmFallback?: boolean },
+  options?: {
+    scope?: DocumentScope;
+    useLlm?: boolean;
+    llmFallback?: boolean;
+    outputFormat?: OutputFormat;
+  },
 ): Promise<GenerateXmlResponse> {
   const res = await fetch(`${API_BASE}/api/extractions/${extractionId}/generate-xml`, {
     method: "POST",
@@ -407,6 +415,7 @@ export async function generateExtractionXml(
       scope: options?.scope ?? "full",
       use_llm: options?.useLlm ?? false,
       llm_fallback: options?.llmFallback ?? true,
+      output_format: options?.outputFormat ?? "auto",
     }),
   });
   if (!res.ok) throw new Error(await parseError(res));

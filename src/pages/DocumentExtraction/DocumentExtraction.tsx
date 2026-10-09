@@ -19,6 +19,7 @@ import {
   type DocumentScope as ApiDocumentScope,
   type ExtractionResult,
   type GenerateXmlResponse,
+  type OutputFormat,
   type PageExtraction,
   type TextBlock,
 } from "../../services/api";
@@ -76,6 +77,8 @@ export const DocumentExtraction = () => {
   const [scope, setScope] = useState<DocumentScope>("full");
   const [extractionId, setExtractionId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templateFormat, setTemplateFormat] = useState<string | null>(null);
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("auto");
   const [scopedIr, setScopedIr] = useState<Record<string, unknown> | null>(null);
   const [scopeLoading, setScopeLoading] = useState(false);
   const [status, setStatus] = useState<ExtractionUiStatus>("idle");
@@ -102,6 +105,8 @@ export const DocumentExtraction = () => {
     setResult(null);
     setExtractionId(null);
     setTemplateId(null);
+    setTemplateFormat(null);
+    setOutputFormat("auto");
     setScopedIr(null);
     setGeneratedXml(null);
     setActiveTab("text");
@@ -117,6 +122,8 @@ export const DocumentExtraction = () => {
     setResult(null);
     setExtractionId(null);
     setTemplateId(null);
+    setTemplateFormat(null);
+    setOutputFormat("auto");
     setScopedIr(null);
     setGeneratedXml(null);
     setSelectedPage(1);
@@ -185,6 +192,12 @@ export const DocumentExtraction = () => {
           templateFile,
         );
         setTemplateId(templateResponse.template_id);
+        const schema = templateResponse.schema as { template_format?: string; root_tag?: string };
+        const fmt =
+          schema.template_format ??
+          (schema.root_tag === "book" ? "docbook_5_book" : "ieee_jats_article");
+        setTemplateFormat(fmt);
+        setOutputFormat(fmt === "docbook_5_book" ? "docbook_5" : "auto");
       }
 
       setMessage("Applying scope filter...");
@@ -266,20 +279,21 @@ export const DocumentExtraction = () => {
       return;
     }
     if (!templateId) {
-      setMessage("Upload a template XML before generating IEEE JATS output.");
+      setMessage("Upload a template XML before generating output.");
       return;
     }
     setGenerating(true);
     setMessage(
       useLlm
         ? "Running LLM semantic mapping (may take 2–5 minutes for large PDFs)..."
-        : "Generating IEEE JATS XML from template...",
+        : "Generating XML from template...",
     );
     try {
       const response = await generateExtractionXml(extractionId, {
         scope: scope as ApiDocumentScope,
         useLlm,
         llmFallback: true,
+        outputFormat,
       });
       setGeneratedXml(response);
       setActiveTab("final_xml");
@@ -289,7 +303,7 @@ export const DocumentExtraction = () => {
         response.warnings.find((w) => !w.toLowerCase().includes("api key")) ??
         response.warnings[0];
       setMessage(
-        `IEEE JATS XML generated — ${modeLabel}.${warning ? ` ${warning}` : ""}`.trim(),
+        `XML generated (${response.output_format}) — ${modeLabel}.${warning ? ` ${warning}` : ""}`.trim(),
       );
     } catch (error) {
       setStatus("failed");
@@ -365,11 +379,28 @@ export const DocumentExtraction = () => {
       {extractionId && templateId ? (
         <section className="card conversion-card">
           <div className="conversion-content">
-            <h2>Generate IEEE JATS XML</h2>
+            <h2>Generate XML</h2>
             <p>
-              Uses your uploaded template as the skeleton and fills it with extracted
-              content. Turn on LLM for per-client template mapping.
+              {templateFormat === "docbook_5_book"
+                ? "DocBook 5.0 book templates export as DocBook XML (template structure preserved). IEEE JATS applies to article templates only."
+                : "Article templates use IEEE JATS generation with extracted content. Turn on LLM for per-client template mapping."}
             </p>
+            <label className="hybrid-llm-toggle" style={{ display: "block", marginBottom: "0.75rem" }}>
+              <span style={{ marginRight: "0.5rem" }}>Output format:</span>
+              <select
+                value={outputFormat}
+                onChange={(event) => setOutputFormat(event.target.value as OutputFormat)}
+                disabled={isBusy || templateFormat === "docbook_5_book"}
+              >
+                <option value="auto">Auto (from template)</option>
+                {templateFormat !== "docbook_5_book" ? (
+                  <option value="ieee_jats">IEEE JATS XML</option>
+                ) : null}
+                {templateFormat === "docbook_5_book" ? (
+                  <option value="docbook_5">DocBook 5.0</option>
+                ) : null}
+              </select>
+            </label>
             <label className="hybrid-llm-toggle">
               <input
                 type="checkbox"
