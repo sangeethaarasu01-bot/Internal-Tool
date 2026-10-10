@@ -221,7 +221,7 @@ export const DocumentExtraction = () => {
     try {
       setStatus("uploading");
       setMessage("Uploading PDF to extraction service...");
-      const started = await startExtraction(selectedFile);
+      const started = await startExtraction(selectedFile, { skipTablesFigures });
 
       setStatus("extracting");
       setMessage("Running Stage 1 layout-aware text extraction...");
@@ -412,6 +412,15 @@ export const DocumentExtraction = () => {
             Sends the PDF to <code>POST /api/extractions</code> only when you
             click Extract Text.
           </p>
+          <label className="hybrid-llm-toggle" style={{ display: "block", marginBottom: "0.75rem" }}>
+            <input
+              type="checkbox"
+              checked={skipTablesFigures}
+              onChange={(event) => setSkipTablesFigures(event.target.checked)}
+              disabled={isBusy}
+            />
+            Skip tables/figures (faster for large books)
+          </label>
           <button
             className="convert-button"
             onClick={handleExtract}
