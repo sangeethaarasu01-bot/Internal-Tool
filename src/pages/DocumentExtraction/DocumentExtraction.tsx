@@ -117,9 +117,6 @@ export const DocumentExtraction = () => {
     setOutputFormat(fmt === "docbook_5_book" ? "docbook_5" : "auto");
   };
 
-  const identityMismatchHint =
-    " Clear the wrong template (button below) or use “Generate template from PDF metadata”, then generate XML again.";
-
   const handleTemplateFromSource = async () => {
     if (!extractionId) {
       setMessage("Run extraction first.");
@@ -248,23 +245,11 @@ export const DocumentExtraction = () => {
 
       if (templateFile) {
         setMessage("Uploading XML template...");
-        try {
-          const templateResponse = await uploadExtractionTemplate(
-            started.extraction_id,
-            templateFile,
-          );
-          applyTemplateUpload(templateResponse);
-        } catch (uploadErr) {
-          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-          if (msg.toLowerCase().includes("do not match")) {
-            await clearExtractionTemplate(started.extraction_id);
-            throw new Error(
-              `${msg} Use a publisher template for this PDF, or clear the XML file and use ` +
-                `"Generate template from PDF metadata" after extraction.`,
-            );
-          }
-          throw uploadErr;
-        }
+        const templateResponse = await uploadExtractionTemplate(
+          started.extraction_id,
+          templateFile,
+        );
+        applyTemplateUpload(templateResponse);
       }
 
       setMessage("Applying scope filter...");
@@ -374,12 +359,7 @@ export const DocumentExtraction = () => {
       );
     } catch (error) {
       setStatus("failed");
-      const msg = error instanceof Error ? error.message : "XML generation failed.";
-      setMessage(
-        msg.toLowerCase().includes("do not match") || msg.includes("409")
-          ? `${msg}${identityMismatchHint}`
-          : msg,
-      );
+      setMessage(error instanceof Error ? error.message : "XML generation failed.");
     } finally {
       setGenerating(false);
     }
@@ -453,9 +433,8 @@ export const DocumentExtraction = () => {
           <div className="conversion-content">
             <h2>Template binding</h2>
             <p>
-              Templates are stored per extraction job in Mongo — retrying generate-xml without
-              rebinding keeps the old template (409 is expected). Clear and regenerate from this
-              PDF, or upload matching publisher XML.
+              Sample XML may come from another publication; book-level metadata in the output is
+              taken from this PDF after generation. Clear the template to upload a different file.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
               <button

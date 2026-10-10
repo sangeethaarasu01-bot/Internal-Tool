@@ -187,22 +187,10 @@ export default function HeuristicChatAgent() {
       if (templateForJob) {
         logLines.push("▸ Uploading template…");
         updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
-        try {
-          templateUpload = await uploadExtractionTemplate(
-            started.extraction_id,
-            templateForJob,
-          );
-        } catch (uploadErr) {
-          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-          if (msg.toLowerCase().includes("do not match")) {
-            await clearExtractionTemplate(started.extraction_id);
-            throw new Error(
-              `${msg} Clear the wrong XML file and attach the matching publisher template, ` +
-                `or send again with PDF only to auto-generate a template from this PDF's metadata.`,
-            );
-          }
-          throw uploadErr;
-        }
+        templateUpload = await uploadExtractionTemplate(
+          started.extraction_id,
+          templateForJob,
+        );
       } else {
         logLines.push("▸ Generating DocBook template from PDF metadata…");
         updateMessage(assistantId, { content: logLines.join("\n"), streaming: true });
