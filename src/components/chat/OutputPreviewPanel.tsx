@@ -27,7 +27,12 @@ export default function OutputPreviewPanel({
         ? downloadUrl(jobId)
         : "#";
   const downloadName =
-    downloadFilename || (extractionId ? `${extractionId}.xml` : jobId ? `${jobId}.xml` : "output.xml");
+    downloadFilename ||
+    (extractionId
+      ? `${extractionId}.xml`
+      : jobId
+        ? `${jobId}.xml`
+        : "output.xml");
   return (
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -53,11 +58,14 @@ export default function OutputPreviewPanel({
         </div>
       )}
       <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-700">
-        <XmlPreview xml={xml.slice(0, 120000)} title="output.xml (truncated in preview)" />
+        <XmlPreview
+          xml={xml.slice(0, 120000)}
+          title="output.xml (hex entities · truncated in preview)"
+        />
       </div>
       <p className="text-[11px] text-slate-500">
-        Review above, then download — or type a fix below (e.g. &quot;use &#x2013; for en-dash in title&quot;) and
-        send.
+        Review above, then download — or type a fix below (e.g. &quot;use
+        &#x2013; for en-dash in title&quot;) and send.
       </p>
     </div>
   );

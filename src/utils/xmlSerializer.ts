@@ -72,13 +72,32 @@ function normalizeForXmlSerialization(text: string): string {
     .replace(/\u00ad/g, "");
 }
 
-function shouldEncodeAsHexEntity(char: string): boolean {
-  const code = char.codePointAt(0) ?? 0;
-  if (code <= 0x7f) {
-    return false;
+/** IEEE punctuation / symbols as hex character references (aligned with backend). */
+const IEEE_HEX_CHAR_ENTITIES: Record<string, string> = {
+  "\u201c": "&#x201C;",
+  "\u201d": "&#x201D;",
+  "\u2018": "&#x2019;",
+  "\u2019": "&#x2019;",
+  "\u2013": "&#x2013;",
+  "\u2014": "&#x2014;",
+  "\u2026": "&#x2026;",
+  "\u00a0": "&#x00A0;",
+  "\u2022": "&#x2022;",
+  "\u00b7": "&#x00B7;",
+  "\u2217": "&#x2217;",
+  "\u204e": "&#x204E;",
+  "\u00d7": "&#x00D7;",
+  "\u00f7": "&#x00F7;",
+  "\u00ae": "&#x00AE;",
+  "\u00a9": "&#x00A9;",
+  "\u2122": "&#x2122;",
+};
+
+function formatHexCharEntity(code: number): string {
+  if (code <= 0xffff) {
+    return `&#x${code.toString(16).toUpperCase().padStart(4, "0")};`;
   }
-  // Letter categories: Lu, Ll, Lt, Lm, Lo (accented Latin, Greek, etc.)
-  return /^\p{L}$/u.test(char);
+  return `&#x${code.toString(16).toUpperCase()};`;
 }
 
 function escapeXmlChar(char: string): string {
@@ -97,13 +116,13 @@ function escapeXmlChar(char: string): string {
   if (char === "'") {
     return HEX_QUOTE_SINGLE;
   }
-  if (shouldEncodeAsHexEntity(char)) {
-    const code = char.codePointAt(0) ?? 0;
-    const hex =
-      code <= 0xffff
-        ? code.toString(16).toUpperCase().padStart(4, "0")
-        : code.toString(16).toUpperCase();
-    return `&#x${hex};`;
+  const ieee = IEEE_HEX_CHAR_ENTITIES[char];
+  if (ieee) {
+    return ieee;
+  }
+  const code = char.codePointAt(0) ?? 0;
+  if (code > 0x7f) {
+    return formatHexCharEntity(code);
   }
   return char;
 }
@@ -213,7 +232,7 @@ function parseXmlDocument(xml: string): Document | null {
   return null;
 }
 
-/** Re-serialize XML with hex quote entities in text nodes and attributes. */
+/** Re-serialize XML with hex entities in text nodes and attributes (preview / download parity). */
 export function serializeXmlStringWithHexQuoteEntities(xml: string): string {
   const doc = parseXmlDocument(xml);
   if (!doc?.documentElement) {
